@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
+import os
 import requests
 import json
 
-# Konfiguration
-POLESTAR_EMAIL = "xx@xxx"
-POLESTAR_PASSWORD = "xxx"
-VIN = "LPSVSEDEEML0xxxxx"
+# Umgebungsvariablen lesen
+POLESTAR_EMAIL = os.getenv('POLESTAR_EMAIL')
+POLESTAR_PASSWORD = os.getenv('POLESTAR_PASSWORD')
+VIN = os.getenv('VIN')
 
 # Funktion zum Abrufen des Login-Tokens und der Cookies
 def get_login_tokens():
