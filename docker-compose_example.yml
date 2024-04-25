@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  polestar:
+    build: .
+    environment:
+      POLESTAR_EMAIL: "xx@xxx"
+      POLESTAR_PASSWORD: "XXX"
+      VIN: "LPSVSEDEEML0XXxxx"
