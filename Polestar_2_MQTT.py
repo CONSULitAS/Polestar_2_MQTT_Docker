@@ -2,6 +2,7 @@
 
 import os
 import requests
+import time
 import json
 
 # Umgebungsvariablen lesen
@@ -58,10 +59,27 @@ def get_battery_data(access_token):
     return response.json()
 
 # Hauptausführungsteil
-path_token, cookie = get_login_tokens()
-auth_code = perform_login(path_token, cookie)
-access_token = get_api_token(auth_code)
-battery_data = get_battery_data(access_token)
+print("Polestar_2_MQTT.py startet")
+print("==========================")
+try:
+    print("get_login_tokens()")
+    path_token, cookie = get_login_tokens()
+    print("perform_login()")
+    auth_code = perform_login(path_token, cookie)
+    print("get_api_token")
+    access_token = get_api_token(auth_code)
 
-print(json.dumps(battery_data, indent=4))
+    last_data = None
 
+    while True:
+        print("get_battery_data()")
+        battery_data = get_battery_data(access_token)
+        if battery_data != last_data:
+            print(json.dumps(battery_data, indent=4))
+            last_data = battery_data
+        time.sleep(300)  # Wartet 5 Minuten
+
+except Exception as e:
+    print(f"Fehler: {str(e)}")
+
+# ***** EOF *****

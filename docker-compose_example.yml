@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  polestar:
+  polestar2mqtt:
     build: .
     environment:
       POLESTAR_EMAIL: "xx@xxx"
