@@ -8,7 +8,13 @@ WORKDIR /app
 COPY Polestar_2_MQTT.py .
 
 # Installieren der erforderlichen Python-Pakete
-RUN pip install requests
+RUN <<EOF
+    apt update && apt upgrade -y
+    pip install --upgrade pip
+    pip install requests #time
+EOF
 
 # Befehl, der beim Start des Containers ausgeführt wird
-CMD ["python", "./Polestar_2_MQTT.py"]
+CMD ["python", "-u", "/app/Polestar_2_MQTT.py"]
+
+# ***** EOF *****
