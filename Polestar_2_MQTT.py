@@ -4,11 +4,12 @@ import os
 import requests
 import time
 import json
+from datetime import datetime, timedelta
 
 # Umgebungsvariablen lesen
-POLESTAR_EMAIL = os.getenv('POLESTAR_EMAIL')
+POLESTAR_EMAIL    = os.getenv('POLESTAR_EMAIL')
 POLESTAR_PASSWORD = os.getenv('POLESTAR_PASSWORD')
-VIN = os.getenv('VIN')
+POLESTAR_VIN      = os.getenv('POLESTAR_VIN')
 
 # Funktion zum Abrufen des Login-Tokens und der Cookies
 def get_login_tokens():
@@ -53,7 +54,7 @@ def get_battery_data(access_token):
     }
     payload = {
         "query": "query GetBatteryData($vin:String!){getBatteryData(vin:$vin){averageEnergyConsumptionKwhPer100Km,batteryChargeLevelPercentage,chargerConnectionStatus,chargingCurrentAmps,chargingPowerWatts,chargingStatus,estimatedChargingTimeMinutesToTargetDistance,estimatedChargingTimeToFullMinutes,estimatedDistanceToEmptyKm,estimatedDistanceToEmptyMiles,eventUpdatedTimestamp{iso,unix}}}",
-        "variables": {"vin": VIN}
+        "variables": {"vin": POLESTAR_VIN}
     }
     response = requests.post(url, headers=headers, json=payload)
     return response.json()
