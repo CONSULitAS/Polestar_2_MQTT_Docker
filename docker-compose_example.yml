@@ -9,5 +9,8 @@ services:
       POLESTAR_PASSWORD: "XXX"
       POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx"
       POLESTAR_CYCLE:    "300" # Sekunden
+      MQTT_BROKER:       "192.168.1.100"
+      MQTT_PORT:         "1883"
+      BASE_TOPIC:        "polestar2"
 
 # ***** EOF *****

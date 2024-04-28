@@ -2,19 +2,39 @@
 
 import traceback
 import os
+import sys
 import requests
 import time
 import json
 from datetime import datetime, timedelta
 import pytz
+import paho.mqtt.client as mqtt
 
 # Umgebungsvariablen lesen
-POLESTAR_EMAIL    = os.getenv('POLESTAR_EMAIL')
-POLESTAR_PASSWORD = os.getenv('POLESTAR_PASSWORD')
-POLESTAR_VIN      = os.getenv('POLESTAR_VIN')
-POLESTAR_CYCLE    = int(os.getenv('POLESTAR_CYCLE')) # Sekunden
-TZ                = os.getenv('TZ') # z.B. 'Europe/Berlin'
+POLESTAR_EMAIL          =     os.getenv('POLESTAR_EMAIL')
+POLESTAR_PASSWORD       =     os.getenv('POLESTAR_PASSWORD')
+POLESTAR_VIN            =     os.getenv('POLESTAR_VIN')
+POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE'))          # Sekunden
+TZ                      =     os.getenv('TZ')                       # z.B. 'Europe/Berlin'
+MQTT_BROKER             =     os.getenv("MQTT_BROKER",    "localhost")
+MQTT_PORT               = int(os.getenv("MQTT_PORT",      1883))
+MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE", 60))
+BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
 # TODO: MQTT-Credentials
+
+# MQTT-Client-Setup
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+# TODO: Migrate to MQTT-Client V2
+# https://github.com/eclipse/paho.mqtt.python/blob/v2.0.0/docs/migrations.rst
+
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+
+def on_disconnect(client, userdata, rc):
+    if rc != 0:
+        print("Unexpected disconnection.")
+        # Reconnect
+        client.reconnect()
 
 def get_local_time(tz, time):
     # Konvertierung in die Zeitzone tz (z.B. Europe/Berlin)
@@ -140,7 +160,15 @@ def get_car_data(vin, access_token):
         print("  response.status_code = " + str(response.status_code))
         raise Exception("get_car_data() Datenabfrage fehlgeschlagen")
     car_data = response.json()['data']
-    return car_data
+    
+    # Filtern der Daten nach der gegebenen VIN
+    filtered_car_data = next((car for car in car_data['getConsumerCarsV2'] if car['vin'] == vin), None)
+    
+    if filtered_car_data is None:
+        raise ValueError(f"get_car_data(): Keine Daten für VIN {vin} gefunden.")
+
+    return filtered_car_data
+
 
 # Funktion zum Abrufen von Batteriedaten
 def get_battery_data(vin, access_token):
@@ -207,6 +235,23 @@ def get_odometer_data(vin, access_token):
     odometer_data = response.json()['data']
     return odometer_data
 
+# Verbindung zum MQTT Broker
+def connect_mqtt():
+    client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
+    client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
+    client.loop_start()
+
+# Rekursives Durchlaufen des JSON-Objekts und Senden der Daten als MQTT-Nachrichten
+def publish_json_as_mqtt(json_obj, topic_prefix=""):
+    if isinstance(json_obj, dict):
+        for key, value in json_obj.items():
+            sub_topic = f"{topic_prefix}/{key}" if topic_prefix else f"{BASE_TOPIC}/{key}"
+            publish_json_as_mqtt(value, sub_topic)
+    else:
+        json_payload = json.dumps(json_obj)
+        client.publish(topic_prefix, json_payload)
+
 # Hauptprogramm
 def main():
     print("Polestar_2_MQTT.py startet")
@@ -216,6 +261,9 @@ def main():
     last_car_data      = None
     last_battery_data  = None
     last_odometer_data = None
+
+    # Starten der MQTT-Verbindung
+    connect_mqtt()
 
     while True:
         # TODO: MQTT-Versand der Daten
@@ -230,18 +278,24 @@ def main():
         if car_data != last_car_data:
             print(json.dumps(car_data, indent=4))
             last_car_data = car_data
+            # Daten als MQTT-Nachrichten senden
+            publish_json_as_mqtt(car_data)
 
         print("get_battery_data()")
         battery_data = get_battery_data(POLESTAR_VIN, access_token)
         if battery_data != last_battery_data:
             print(json.dumps(battery_data, indent=4))
             last_battery_data = battery_data
+            # Daten als MQTT-Nachrichten senden
+            publish_json_as_mqtt(battery_data)
         
         print("get_odometer_data()")
         odometer_data = get_odometer_data(POLESTAR_VIN, access_token)
         if odometer_data != last_odometer_data:
             print(json.dumps(odometer_data, indent=4))
             last_odometer_data = odometer_data
+            # Daten als MQTT-Nachrichten senden
+            publish_json_as_mqtt(odometer_data)
 
         time.sleep(POLESTAR_CYCLE)  # wartet POLESTAR_CYCLE Sekunden
 
