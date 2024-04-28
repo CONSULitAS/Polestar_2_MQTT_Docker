@@ -1,9 +1,13 @@
-version: '3.8'
+#version: '3.8' (deprecated)
 
 services:
   polestar2mqtt:
     build: .
     environment:
+      TZ:                "Europe/Berlin"
       POLESTAR_EMAIL:    "xx@xxx"
       POLESTAR_PASSWORD: "XXX"
-      POLESTAR_VIN:      "LPSVSEDEEML0XXxxx"
+      POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx"
+      POLESTAR_CYCLE:    "300" # Sekunden
+
+# ***** EOF *****
