@@ -36,6 +36,13 @@ def on_disconnect(client, userdata, rc):
         # Reconnect
         client.reconnect()
 
+# Verbindung zum MQTT Broker
+def connect_mqtt():
+    client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
+    client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
+    client.loop_start()
+
 def get_local_time(tz, time):
     # Konvertierung in die Zeitzone tz (z.B. Europe/Berlin)
     local_time = time.astimezone(pytz.timezone(tz))
@@ -235,22 +242,15 @@ def get_odometer_data(vin, access_token):
     odometer_data = response.json()['data']
     return odometer_data
 
-# Verbindung zum MQTT Broker
-def connect_mqtt():
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
-    client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
-    client.loop_start()
-
 # Rekursives Durchlaufen des JSON-Objekts und Senden der Daten als MQTT-Nachrichten
-def publish_json_as_mqtt(json_obj, topic_prefix=""):
+def publish_json_as_mqtt(topic, json_obj):
     if isinstance(json_obj, dict):
         for key, value in json_obj.items():
-            sub_topic = f"{topic_prefix}/{key}" if topic_prefix else f"{BASE_TOPIC}/{key}"
-            publish_json_as_mqtt(value, sub_topic)
+            sub_topic = f"{topic}/{key}"
+            publish_json_as_mqtt(sub_topic, value)
     else:
         json_payload = json.dumps(json_obj)
-        client.publish(topic_prefix, json_payload)
+        client.publish(topic, json_payload)
 
 # Hauptprogramm
 def main():
@@ -279,7 +279,7 @@ def main():
             print(json.dumps(car_data, indent=4))
             last_car_data = car_data
             # Daten als MQTT-Nachrichten senden
-            publish_json_as_mqtt(car_data)
+            publish_json_as_mqtt(BASE_TOPIC +"/getConsumerCarsV2", car_data)
 
         print("get_battery_data()")
         battery_data = get_battery_data(POLESTAR_VIN, access_token)
@@ -287,7 +287,7 @@ def main():
             print(json.dumps(battery_data, indent=4))
             last_battery_data = battery_data
             # Daten als MQTT-Nachrichten senden
-            publish_json_as_mqtt(battery_data)
+            publish_json_as_mqtt(BASE_TOPIC, battery_data)
         
         print("get_odometer_data()")
         odometer_data = get_odometer_data(POLESTAR_VIN, access_token)
@@ -295,7 +295,7 @@ def main():
             print(json.dumps(odometer_data, indent=4))
             last_odometer_data = odometer_data
             # Daten als MQTT-Nachrichten senden
-            publish_json_as_mqtt(odometer_data)
+            publish_json_as_mqtt(BASE_TOPIC, odometer_data)
 
         time.sleep(POLESTAR_CYCLE)  # wartet POLESTAR_CYCLE Sekunden
 
