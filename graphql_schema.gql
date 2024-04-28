@@ -1,0 +1,1047 @@
+https://github.com/leeyuentuen/polestar_api/issues/10#issuecomment-1859263398
+
+type Acceleration {
+  value: Float!
+  unit: String!
+  description: String!
+}
+
+type AcceptedHandoverTime {
+  start: String
+  end: String
+  timezone: String
+}
+
+type AdditionalCustomerId {
+  id: String
+  code: String
+}
+
+type App {
+  name: String
+  host(tld: String): String
+  patterns: [String]
+  environment: String
+  domain: String
+}
+
+input Attachment {
+  name: String
+  body: String
+}
+
+input Attachments {
+  name: String
+  body: String
+}
+
+type AuthTokens {
+  access_token: String
+  refresh_token: String
+  id_token: String
+  expires_in: Int
+}
+
+type Battery {
+  averageEnergyConsumptionKwhPer100Km: Float
+  batteryChargeLevelPercentage: Float
+  chargerConnectionStatus: String
+  chargingCurrentAmps: Int
+  chargingPowerWatts: Int
+  chargingStatus: String
+  estimatedChargingTimeMinutesToTargetDistance: Int
+  estimatedChargingTimeToFullMinutes: Int
+  estimatedDistanceToEmptyKm: Int
+  estimatedDistanceToEmptyMiles: Int
+  eventUpdatedTimestamp: EventUpdatedTimestamp
+}
+
+type BrandStatus {
+  code: String
+  timestamp: String
+  description: String
+}
+
+input CancellationCase {
+  caseId: String!
+  caseNumber: String!
+  paymentMethod: PaymentMethod!
+  bankName: String
+  bankAccountHolder: String
+  bankAccountNumber: String
+  bankSortCode: String
+  iban: String
+  bic: String
+  attachment: [Attachment]
+  returnReason: String
+  currentOdometerReading: Int
+  returnOdometerReading: Int
+  returnLocation: String
+  returnTimeSlots: String
+  extrasOrdered: String
+  damagedCar: Boolean
+  otherInformation: String
+}
+
+type Car {
+  id: Int @deprecated(reason: "id is deprecated. Use vin instead.")
+  vin: String
+  model: String
+  modelYear: String
+  modelCode: String
+  package: String
+  exteriorImageUrl: String
+  imageAngles: [String!]
+}
+
+type CarImage {
+  imageUrl: String
+}
+
+type CarImages {
+  studio: VDMSImage
+  location: VDMSImage
+  interior: VDMSImage
+}
+
+type CarInformation {
+  id: Int
+  consumerId: String
+  status: String
+  orderStatus: String
+  vin: String
+}
+
+enum CaseRecordType {
+  CUSTOMERSUPPORT
+  DAMAGEREPAIR
+  SALESTOORDER
+  SERVICEORDER
+}
+
+type Claim {
+  type: String
+  validFromDate: String
+  validUntilDate: String
+  validUntilMileage: String
+  performedJobs: [PerformedClaimJob]
+}
+
+type ClaimOperation {
+  code: String
+}
+
+type ClaimPart {
+  code: String
+}
+
+type CommonStatusPoint {
+  code: Int
+  timestamp: String
+  description: String
+}
+
+type Consent {
+  termsAndConditionVersion: String
+  consent: Boolean!
+}
+
+type Consumer {
+  salesforceId: String
+  firstName: String
+  lastName: String
+  email: String
+  birthdate: String
+  mobilePhone: String
+  language: String
+  preferredLanguage: String
+  countryCode: String
+  country: String
+  city: String
+  zipCode: String
+  streetAddress: String
+  state: String
+  additionalCustomerIds: [AdditionalCustomerId]
+  hasOptedOutOfEmail: Boolean
+  optInDate: String
+  optOutDate: String
+  customerType: String
+  username: String
+  gtmId: String
+  isPolestarOrVolvoEmployee: Boolean
+  linkToken: String
+}
+
+type ConsumerUpdateResponse {
+  salesforceId: String
+  error: String
+  message: String
+}
+
+type Content {
+  exterior: Property
+  exteriorDetails: Property
+  interior: Property
+  performancePackage: Property
+  performanceOptimizationSpecification: performanceOptimizationSpecification
+  wheels: Property
+  plusPackage: Property
+  pilotPackage: Property
+  motor: Property
+  model: Model
+  images: CarImages
+  specification: Specification
+  dimensions: Dimensions
+  towbar: Property
+}
+
+enum ContentDisposition {
+  Attachment
+  Inline
+  Formdata
+  Signal
+}
+
+enum CountryFilter {
+  Alltime
+  Year
+}
+
+type CountryLeaderboard {
+  scores: [LeaderboardCountry]!
+  country: LeaderboardCountry
+}
+
+type CreateCaseResponse {
+  message: String
+  error: String
+}
+
+type CreateFleetResponse {
+  message: String
+  error: String
+}
+
+type CreateLeadResponse {
+  message: String
+  error: String
+}
+
+type Dimensions {
+  wheelbase: ValueLabel
+  groundClearanceWithPerformance: ValueLabel
+  groundClearanceWithoutPerformance: ValueLabel
+  dimensions: ValueLabel
+}
+
+type DocumentData {
+  documentType: String
+  subType: String
+  documentId: String
+  dateCreated: String
+  size: Int
+  contentType: String
+}
+
+type DocumentDataV2 {
+  documentId: String
+  link: String
+  name: String
+  expirationDate: String
+  documentType: String
+  dateCreated: String
+  version: String
+  contentType: String
+  extension: String
+  subType: String
+  size: Int
+  linkedEntity: LinkedEntity
+}
+
+type DocumentMetadata {
+  link: String
+}
+
+enum DocumentSearchType {
+  VIN
+}
+
+enum DocumentSearchTypeV2 {
+  Vin
+  PolestarId
+  PomsId
+}
+
+type ElectricalEngineNumber {
+  number: String!
+  placement: String!
+}
+
+type Energy {
+  elecRange: String
+  elecRangeUnit: String
+  elecEnergyConsumption: String
+  elecEnergyUnit: String
+  weightedCombinedCO2: String
+  weightedCombinedCO2Unit: String
+  weightedCombinedFuelConsumption: String
+  weightedCombinedFuelConsumptionUnit: String
+}
+
+type Event {
+  name: String
+  date: String
+  location: String
+  text: String
+  image: Image
+  times: String
+  link: String
+}
+
+type EventUpdatedTimestamp {
+  iso: String
+  unix: String
+}
+
+type Extras {
+  id: Int
+  articleNumber: String
+  title: String
+  description: String
+  sortorder: Int
+  requires: [ItemOption]
+  incompatible: [ItemOption]
+}
+
+type FeatureImage {
+  url: String!
+  alt: String
+}
+
+type FeatureProperty {
+  type: String!
+  code: String!
+  name: String
+  description: String
+  excluded: Boolean
+  galleryImage: [FeatureImage]!
+  thumbnail: FeatureImage
+}
+
+input FleetCase {
+  country: String
+  subject: String!
+  description: String
+  caseType: String
+  caseSubType: String
+  caseStatus: String
+  externalFspId: String
+  model: String
+  attachment: [Attachments]
+}
+
+type GetCartResult {
+  Item: OutputCart
+}
+
+input GetDocumentMetadataRequest {
+  id: String!
+  contentDisposition: ContentDisposition
+  downloadFileName: String
+}
+
+type HandoverBooking {
+  acceptedHandoverTime: AcceptedHandoverTime
+}
+
+type Hardware {
+  nodeAddress: String!
+  partNo: String
+  description: HardwareDescription
+  software: [Software]
+}
+
+type HardwareDescription {
+  text: String
+  short: String
+}
+
+type Image {
+  alt: String
+  url: String
+}
+
+input InputCart {
+  cart: [InputCartItem]!
+  finance: InputFinance!
+  itemsCount: Int!
+  consumer: InputCartConsumer!
+  orderStatus: Int!
+  market: InputMarket!
+  deliveryMethod: String!
+  connectId: String
+  transactions: [InputTransaction]
+}
+
+input InputCartConsumer {
+  firstName: String
+  lastName: String
+  email: String
+  mobilePhone: String
+  birthdate: String
+  language: String
+  streetAddress: String
+  zipCode: String
+  city: String
+  country: String
+  countryCode: String
+  companyName: String
+  vatNo: String
+  orgNo: String
+  careOf: String
+  customerType: String
+}
+
+input InputCartItem {
+  id: Int
+  title: String
+  description: String
+  featuredImageUrl: String
+  marketPrice: Float
+  marketVat: Float
+  quantity: Int
+  maxQuantity: Int
+  minQuantity: Int
+  extras: [InputExtras]
+  currency: String
+}
+
+input InputExtras {
+  id: Int
+  articleNumber: String
+  title: String
+  description: String
+  sortorder: Int
+  requires: [InputItemOption]
+  incompatible: [InputItemOption]
+}
+
+input InputFinance {
+  totalPrice: Float!
+  totalVat: Float!
+  currency: String
+}
+
+input InputItemOption {
+  type: String
+  code: String
+}
+
+input InputMarket {
+  country: String
+  language: String
+}
+
+input InputTransaction {
+  createdAt: String
+  id: String
+  transactionStatus: Int
+}
+
+type InternalCar {
+  origin: String!
+  registeredAt: String!
+}
+
+type IntrospectResponse {
+  active: Boolean
+}
+
+type ItemOption {
+  type: String
+  code: String
+}
+
+type LatestClaimStatus {
+  mileage: String
+  mileageUnit: String
+  registeredDate: String
+  vehicleAge: String
+}
+
+input LeadCase {
+  firstName: String
+  lastName: String
+  email: String
+  mobilePhone: String
+  source: String
+  emailOptOut: Boolean
+  doubleOptInDate: String
+  newsletterSubscribed: String
+  polestarId: String
+  market: String
+  country: String
+  preferredLanguage: String
+  consentName: String
+  consentType: String
+  consentDate: String
+  privacyPolicy: String
+  campaignSourceCode: String
+  role: String
+  description: String
+  leadRecordType: String
+  postalCode: String
+  type: String
+  leasingCompanyName: String
+  companyName: String
+  bringAFriend: Int
+  clothingSize: String
+  foodPreferences: String
+  parkingSpotNeeded: Boolean
+  rideAlong: Boolean
+  ticketNeeded: Boolean
+  vehicle: String
+  birthday: String
+  street: String
+  city: String
+  state: String
+}
+
+type LeaderboardCountry {
+  code: String!
+  score: Int!
+  rank: Int!
+  trend: String!
+}
+
+type LeaderboardUser {
+  displayName: String!
+  score: Int!
+  rank: Int!
+  trend: String!
+  psid: String!
+  country: String!
+  favorite: Boolean
+  locatedOnPage: Int
+  scoreToMoveUp: Int
+}
+
+union LinkedEntity = Car | Order
+
+type LoadResponse {
+  returnUrl: String
+  orderId: String
+  configuration: String
+}
+
+type LoginConfig {
+  loginUrl: String
+  logoutUrl: String
+  baseUrl: String
+}
+
+type Market {
+  locale: String
+  marketName: String
+  marketType: String
+  countryCode: String
+  cmsLocale: String
+  languageCode: String
+  languageName: String
+  region: String
+  apiRegion: String
+  dateFormat: String
+  features: [String]
+}
+
+type Model {
+  name: String
+  code: String
+}
+
+type Motor {
+  description: String
+  code: String
+}
+
+type Mutation {
+  revokeToken(token: String!): TokenRevokeResponse
+  setConsent(consent: Boolean!, displayName: String, termsAndConditionVersion: String, market: String!): Boolean
+  addFavorite(psid: String!): Boolean
+  removeFavorite(psid: String!): Boolean
+  saveCart(orderId: String, cart: InputCart!): SaveCartResponse
+  updateConsumer(body: MutationableConsumer!): ConsumerUpdateResponse
+  createFleetRequest(body: FleetCase!): CreateFleetResponse
+  createLeadRequest(body: LeadCase!): CreateLeadResponse
+  createCaseRequest(body: SupportCase!): CreateCaseResponse
+  createGDPRRequest(body: SupportCase!): CreateCaseResponse
+  createCancellationRequest(body: CancellationCase!): CreateCaseResponse
+}
+
+input MutationableConsumer {
+  firstName: String
+  lastName: String
+  email: String
+  birthdate: String
+  mobilePhone: String
+  language: String
+  countryCode: String
+  country: String
+  city: String
+  zipCode: String
+  streetAddress: String
+  state: String
+  stateCode: String
+  hasOptedOutOfEmail: Boolean
+}
+
+type Odometer {
+  averageSpeedKmPerHour: Int
+  eventUpdatedTimestamp: EventUpdatedTimestamp
+  odometerMeters: Int
+  tripMeterAutomaticKm: Float
+  tripMeterManualKm: Float
+}
+
+type Operation {
+  id: String!
+  code: String!
+  description: String
+  quantity: Float
+  performedDate: String!
+}
+
+type Order {
+  orderId: String
+  type: String
+  consumerId: Int
+  packageId: Int
+  configurationId: String
+  source: String
+  externalOrderId: String
+  placedAt: String
+  placeAtIso: String
+  termsAndConditionsUrl: String
+  redirectUrl: String
+  totalPrice: Float
+  deposit: Float
+  depositUsed: Boolean
+  orderState: String
+  lockState: String
+  downPayment: Float
+  addressLine1: String
+  address: String @deprecated(reason: "Use 'addressLine1'.")
+  addressLine2: String
+  zipCode: String
+  city: String
+  district: String
+  province: String
+  countryCode: String
+  country: String
+  car: Car
+  lines: [OrderItem]
+  items: [OrderItem] @deprecated(reason: "Use 'lines'.")
+  roles: [String]
+  handoverBooking: HandoverBooking
+}
+
+type OrderItem {
+  id: Int
+  title: String
+  price: Float
+  total: Float
+  deposit: Float
+  downPayment: Float
+  currency: String
+  quantity: Int
+  type: String
+}
+
+enum Origin {
+  EMAIL
+  PHONE
+  WEB
+  FACEBOOK
+  TWITTER
+  CONTACTFORM
+}
+
+type OutputCart {
+  orderId: String
+  cart: [OutputCartItem]
+  finance: OutputFinance
+  itemsCount: Int
+  consumer: OutputCartConsumer
+  orderStatus: Int
+  market: OutputMarket
+  deliveryMethod: String
+  connectId: String
+  transactions: [OutputTransaction]
+}
+
+type OutputCartConsumer {
+  firstName: String
+  lastName: String
+  email: String
+  mobilePhone: String
+  birthdate: String
+  language: String
+  streetAddress: String
+  zipCode: String
+  city: String
+  country: String
+  countryCode: String
+  companyName: String
+  vatNo: String
+  orgNo: String
+  careOf: String
+  customerType: String
+}
+
+type OutputCartItem {
+  id: Int
+  title: String
+  description: String
+  featuredImageUrl: String
+  marketPrice: Float
+  marketVat: Float
+  quantity: Int
+  maxQuantity: Int
+  minQuantity: Int
+  extras: [Extras]
+  currency: String
+}
+
+type OutputFinance {
+  totalPrice: Float!
+  totalVat: Float!
+  currency: String
+}
+
+type OutputMarket {
+  country: String
+  language: String
+}
+
+type OutputTransaction {
+  createdAt: String
+  id: String
+  transactionStatus: Int
+}
+
+type Owner {
+  id: String!
+  registeredAt: String!
+  information: OwnerInformation
+}
+
+type OwnerInformation {
+  polestarId: String
+  ownerType: String
+}
+
+type Part {
+  id: String!
+  code: String!
+  description: String
+  quantity: Float
+  performedDate: String!
+}
+
+enum PaymentMethod {
+  BANKTRANSACTION
+  CREDITCARD
+  OTHER
+}
+
+type PerformanceOptimization {
+  value: Boolean!
+  description: String
+  timestamp: String
+}
+
+type performanceOptimizationSpecification {
+  power: [Power]
+  torqueMax: [TorqueMax]
+  acceleration: [Acceleration]
+}
+
+type PerformedClaimJob {
+  repairDate: String
+}
+
+type PerformedClaims {
+  claimType: String
+  workshopId: String
+  market: String
+  orderNumber: String
+  claimPerformedManually: Boolean
+  orderEndDate: String
+  mileage: String
+  mileageUnit: String
+  vehicleAge: String
+  symptomCode: String
+  parts: [ClaimPart]
+  operations: [ClaimOperation]
+}
+
+type Power {
+  value: Int!
+  unit: String!
+}
+
+type Property {
+  code: String!
+  name: String
+  description: String
+  excluded: Boolean
+  galleryImage: [FeatureImage]!
+  thumbnail: FeatureImage
+}
+
+type Query {
+  applications(env: String): [App]
+  getApplications(env: String): [App]
+  application(name: String!, env: String): App
+  getAuthToken(code: String): AuthTokens
+  getAuthConfig(market: String): LoginConfig
+  refreshAuthToken(token: String!): Token
+  getConsumer(id: String): Consumer
+  introspectToken(token: String!): IntrospectResponse
+  hello(message: String): String
+  getUserLeaderboard(market: String!, filter: UserFilter!, limit: Int, skip: Int, name: String, onlyFavorites: Boolean): UserLeaderboard!
+  getConsent: Consent
+  getCountryLeaderboard(market: String!, filter: CountryFilter!, searchValue: String): CountryLeaderboard!
+  getMarkets(marketNames: [String]): [Market]
+  markets(marketNames: [String]): [Market]
+  market(marketName: String, locale: String, cmsLocale: String): Market
+  getBatteryData(vin: String!): Battery
+  getOdometerData(vin: String!): Odometer
+  getConsumerCars: [Car]!
+  getConsumerCarsV2(locale: String): [VehicleInformation!]!
+  getConsumerCarsByVin(vin: [String]!): [CarInformation]
+  getCart(market: String): GetCartResult
+  getConfiguration(orderId: String!): LoadResponse
+  getDocumentMetadata(input: GetDocumentMetadataRequest!): DocumentMetadata
+  searchDocuments(input: SearchDocumentsRequest!): [DocumentData]
+  getEvents: [Event]
+  getOrders: [Order]!
+  searchDocumentsV2(input: SearchDocumentsRequestV2!): [DocumentDataV2]!
+  getUserDocuments: [DocumentDataV2]!
+}
+
+type RemoveCartResponse {
+  message: String
+  error: String
+}
+
+type SaveCartResponse {
+  orderId: String
+  status: Int
+  message: String
+}
+
+input SearchDocumentsRequest {
+  searchVal: String!
+  searchType: DocumentSearchType
+  documentType: String
+}
+
+input SearchDocumentsRequestV2 {
+  searchVal: String!
+  entityType: DocumentSearchTypeV2!
+}
+
+type Software {
+  partNo: String!
+}
+
+type Specification {
+  battery: String
+  bodyType: String
+  brakes: String
+  combustionEngine: String
+  electricMotors: String
+  performance: String
+  suspension: String
+  tireSizes: String
+  torque: String
+  totalHp: String
+  totalKw: String
+  trunkCapacity: ValueLabel
+}
+
+input SupportCase {
+  caseRecordType: CaseRecordType
+  origin: Origin
+  firstName: String
+  lastName: String
+  email: String
+  market: String
+  country: String
+  preferredLanguage: String
+  subject: String
+  description: String
+  streetAddress: String
+  salesforceId: String
+  reason: String
+  mobilePhone: String
+  caseType: String
+  caseSubType: String
+  additionalCountry: String
+  requestSource: String
+  region: String
+  zipCode: String
+  city: String
+  privacyPolicy: String
+  isEscalated: String
+  caseStatus: String
+}
+
+type Token {
+  access_token: String
+  refresh_token: String
+  id_token: String
+  expires_in: Int
+}
+
+type TokenRevokeResponse {
+  success: Boolean
+}
+
+type TorqueMax {
+  value: Int!
+  unit: String!
+}
+
+type TransactionReponse {
+  id: String
+  transactionStatus: Int
+  createdAt: String
+}
+
+enum UserFilter {
+  GlobalAlltime
+  GlobalYear
+  CountryAlltime
+  CountryYear
+}
+
+type UserLeaderboard {
+  top: [LeaderboardUser]!
+  before: LeaderboardUser
+  user: LeaderboardUser
+  after: LeaderboardUser
+  totalUsersCount: Int
+}
+
+type ValueLabel {
+  label: String
+  value: String
+}
+
+type VDMSImage {
+  url: String!
+  angles: [String]
+  resolutions: [String]
+}
+
+type VehicleInformation {
+  vin: String!
+  internalVehicleIdentifier: String!
+  salesType: String
+  currentPlannedDeliveryDate: String
+  market: String!
+  originalMarket: String!
+  pno34: String!
+  modelYear: String!
+  belongsToFleet: Boolean!
+  registrationNo: String
+  metaOrderNumber: String!
+  factoryCompleteDate: String
+  registrationDate: String
+  deliveryDate: String
+  serviceHistory: [WorkOrder]
+  content: Content
+  primaryDriver: String
+  primaryDriverRegistrationTimestamp: String
+  owners: [Owner]
+  wltpNedcData: WltpNedcData
+  energy: Energy
+  fuelType: String
+  drivetrain: String
+  numberOfDoors: Int
+  numberOfSeats: Int
+  motor: Motor
+  maxTrailerWeight: Weight
+  curbWeight: Weight
+  hasPerformancePackage: Boolean
+  numberOfCylinders: Int
+  cylinderVolume: Int
+  cylinderVolumeUnit: String
+  transmission: String
+  numberOfGears: Int
+  structureWeek: String
+  hardware: [Hardware]
+  software: VehicleSoftware
+  claims: [Claim]
+  performedClaims: [PerformedClaims]
+  latestClaimStatus: LatestClaimStatus
+  internalCar: InternalCar
+  edition: String
+  commonStatusPoint: CommonStatusPoint
+  brandStatus: BrandStatus
+  intermediateDestinationCode: String
+  partnerDestinationCode: String
+  features: [FeatureProperty]
+  electricalEngineNumbers: [ElectricalEngineNumber]
+}
+
+type VehicleInformationByLocale {
+  locale: String!
+  result: VehicleInformation
+}
+
+type VehiclesInformationByLocale {
+  locale: String!
+  result: [VehicleInformation]
+}
+
+type VehicleSoftware {
+  version: String
+  versionTimestamp: String
+  performanceOptimization: PerformanceOptimization
+}
+
+type Weight {
+  value: Int
+  unit: String
+}
+
+type WltpNedcData {
+  wltpCO2Unit: String
+  wltpElecEnergyConsumption: String
+  wltpElecEnergyUnit: String
+  wltpElecRange: String
+  wltpElecRangeUnit: String
+  wltpWeightedCombinedCO2: String
+  wltpWeightedCombinedFuelConsumption: String
+  wltpWeightedCombinedFuelConsumptionUnit: String
+}
+
+type WorkOrder {
+  claimType: String
+  market: String!
+  mileage: String
+  mileageUnit: String
+  operations: [Operation]
+  orderEndDate: String
+  orderNumber: String!
+  orderStartDate: String!
+  parts: [Part]
+  status: String!
+  statusDMS: String!
+  symptomCode: String
+  vehicleAge: String
+  workshopId: String!
+}
