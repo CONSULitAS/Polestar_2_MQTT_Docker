@@ -9,4 +9,7 @@ The initial Prompt for ChatGPT was taken from @demichve on the German Polestar F
 
 If ChatGPT has been involved in development steps here, this will be shorn in the comments to corresponding commits in this repository.
 
-Heads up: This is work in progress. Currently the received JSON ist printed to STDOUT.
+Heads up: This is work in progress, but now usable. Pull-Requests welcome!
+
+Discussions (in german ) here:
+https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
