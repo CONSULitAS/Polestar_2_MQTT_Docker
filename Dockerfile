@@ -1,6 +1,9 @@
 # Verwenden eines offiziellen Python Basisimages
 FROM python:3.12.2-slim
 
+RUN groupadd -g 999 python && \
+    useradd -r -u 999 -g python python
+
 # Arbeitsverzeichnis im Container setzen
 WORKDIR /app
 
@@ -20,6 +23,8 @@ RUN <<EOF
     pip install --upgrade pip
     pip install -r requirements.txt
 EOF
+
+USER 999
 
 # Befehl, der beim Start des Containers ausgeführt wird
 CMD ["python", "-u", "/app/Polestar_2_MQTT.py"]
