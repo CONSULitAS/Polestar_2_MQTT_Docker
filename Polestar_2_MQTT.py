@@ -143,18 +143,19 @@ def get_car_data(vin, access_token):
                         "vin,"
                         "internalVehicleIdentifier,"
                         "modelYear,"
-                        # "content {"
-                        #     "code,"
-                        #     "name"
-                        # "}"
-                        # "images {"
-                        #     "studio {"
-                        #         "url,"
-                        #         "angles"
-                        #     "}"
-                        # "}"
+                        #"claims {"             # läuft, aber noch nicht besonders nützlich
+                        #    "validFromDate,"
+                        #    "validUntilDate,"
+                        #    "validUntilMileage"
+                        #"},"
                         "hasPerformancePackage,"
+                        "software {"
+                            "version,"
+                            "versionTimestamp"
+                        "},"
                         "registrationNo,"
+                        "factoryCompleteDate,"
+                        "registrationDate,"
                         "deliveryDate,"
                         "currentPlannedDeliveryDate"
                     "}"
@@ -165,6 +166,7 @@ def get_car_data(vin, access_token):
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
         print("  response.status_code = " + str(response.status_code))
+        print(response)
         raise Exception("get_car_data() Datenabfrage fehlgeschlagen")
     car_data = response.json()['data']
     
@@ -250,7 +252,7 @@ def publish_json_as_mqtt(topic, json_obj):
             publish_json_as_mqtt(sub_topic, value)
     else:
         json_payload = json.dumps(json_obj)
-        client.publish(topic, json_payload)
+        client.publish(topic, json_payload, qos=1, retain=True)
 
 # Hauptprogramm
 def main():
