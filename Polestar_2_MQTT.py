@@ -321,6 +321,12 @@ def main():
 
         time.sleep(POLESTAR_CYCLE)  # wartet POLESTAR_CYCLE Sekunden
 
+# Signal-Handler für SIGTERM
+def signal_handler(sig, frame):
+    print("SIGTERM erhalten. Beende das Programm.")
+    server.shutdown()
+    sys.exit(0)
+
 try:
     main()
 except Exception as e:
