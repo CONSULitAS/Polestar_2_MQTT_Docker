@@ -79,13 +79,13 @@ def perform_login(email, password, path_token, cookie):
         raise Exception("perform_login(): Login fehlgeschlagen")
 
     max_age = response.headers['Strict-Transport-Security'].split("max-age=")[1].split(";")[0]
-    print("  max_age    = " + str(max_age))
+    print(    "  max_age    = " + str(max_age))
     try:
         uid    = response.headers['Location'].split("uid=")[1].split("&")[0]
-        print("  uid       = " + str(uid))
+        print("  uid        = " + str(uid))
     except:
         uid = None
-        print("  uid       =  NONE")
+        print("  uid        =  NONE")
     try:
         code    = response.headers['Location'].split("code=")[1].split("&")[0]
         print("  code       = " + str(code))
@@ -105,7 +105,7 @@ def perform_login(email, password, path_token, cookie):
 
 # Funktion zum Abrufen des API-Tokens
 def get_api_token(code):
-    url = "https://pc-api.polestar.com/eu-north-1/auth"
+    url = "https://pc-api.polestar.com/eu-north-1/auth/"
     headers = {
         "Content-Type": "application/json"
     }
@@ -119,11 +119,12 @@ def get_api_token(code):
                     "}"
                  "}",
         "operationName": "getAuthToken",
-        "variables": {"code": code}
+        "variables": json.dumps({"code": code})
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200 or "errors" in response.json():
         print("  response.status_code = " + str(response.status_code))
+        print(json.dumps(response.json(), indent=2))
         raise Exception("get_api_token(): API-Token-Anfrage fehlgeschlagen")
     api_creds     = response.json()['data']['getAuthToken']
     access_token  = api_creds['access_token']
