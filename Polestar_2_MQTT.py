@@ -54,7 +54,7 @@ def get_local_time(tz, time):
 def get_login_tokens():
     url = "https://polestarid.eu.polestar.com/as/authorization.oauth2?response_type=code&client_id=polmystar&redirect_uri=https://www.polestar.com%2Fsign-in-callback&scope=openid+profile+email+customer%3Aattributes"
     response = requests.get(url, allow_redirects=False)
-    if response.status_code != 303: # = 'see other'
+    if response.status_code not in [302, 303]: # = 'see other'
         print("  response.status_code = " + str(response.status_code))
         raise Exception("get_login_tokens(): Login-Token-Anfrage fehlgeschlagen")
     cookies    = response.headers.get('Set-Cookie')
@@ -74,13 +74,33 @@ def perform_login(email, password, path_token, cookie):
     }
     data = f"pf.username={email}&pf.pass={password}"
     response = requests.post(url, headers=headers, data=data, allow_redirects=False)
-    if response.status_code != 302:
+    if response.status_code not in [302, 303]:
         print("  response.status_code = " + str(response.status_code))
         raise Exception("perform_login(): Login fehlgeschlagen")
-    code    = response.headers['Location'].split("code=")[1].split("&")[0]
+
     max_age = response.headers['Strict-Transport-Security'].split("max-age=")[1].split(";")[0]
-    print("  code       = " + str(code))
     print("  max_age    = " + str(max_age))
+    try:
+        uid    = response.headers['Location'].split("uid=")[1].split("&")[0]
+        print("  uid       = " + str(uid))
+    except:
+        uid = None
+        print("  uid       =  NONE")
+    try:
+        code    = response.headers['Location'].split("code=")[1].split("&")[0]
+        print("  code       = " + str(code))
+    except:
+        code = None
+        print("  code       = NONE")
+
+    # handle missing code (e.g., accepting terms and conditions)
+    if code is None and uid:
+        data = {"pf.submit": True, "subject": uid}
+        url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping"
+        response = requests.post(url, headers=headers, data=data, allow_redirects=False)
+        code    = response.headers['Location'].split("code=")[1].split("&")[0]
+        print("  GOT CODE!       = " + str(code))
+
     return code
 
 # Funktion zum Abrufen des API-Tokens
@@ -270,7 +290,7 @@ def main():
     while True:
         # TODO: MQTT-Versand der Daten
 
-        if expiry_time == None or datetime.now() >= expiry_time - timedelta(seconds = 2* POLESTAR_CYCLE):
+        if expiry_time == None or datetime.now() >= expiry_time:
             # TODO WORKAROUND: neu einloggen, statt refresh_token nutzen
             print("get_token()")
             access_token, expiry_time, refresh_token = get_token(POLESTAR_EMAIL, POLESTAR_PASSWORD)
