@@ -19,7 +19,9 @@ TZ                      =     os.getenv('TZ')                       # z.B. 'Euro
 MQTT_BROKER             =     os.getenv("MQTT_BROKER",    "localhost")
 MQTT_PORT               = int(os.getenv("MQTT_PORT",      1883))
 MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE", 60))
+
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
+CLIENT_ID               =     "l3oopkc_10"
 # TODO: MQTT-Credentials
 
 # MQTT-Client-Setup
@@ -52,7 +54,7 @@ def get_local_time(tz, time):
 
 # Funktion zum Abrufen des Login-Tokens und der Cookies
 def get_login_tokens():
-    url = "https://polestarid.eu.polestar.com/as/authorization.oauth2?response_type=code&client_id=polmystar&redirect_uri=https://www.polestar.com%2Fsign-in-callback&scope=openid+profile+email+customer%3Aattributes"
+    url = f"https://polestarid.eu.polestar.com/as/authorization.oauth2?response_type=code&client_id={CLIENT_ID}&redirect_uri=https://www.polestar.com%2Fsign-in-callback&scope=openid+profile+email+customer%3Aattributes"
     response = requests.get(url, allow_redirects=False)
     if response.status_code not in [302, 303]: # = 'see other'
         print("  response.status_code = " + str(response.status_code))
