@@ -1,0 +1,17 @@
+---
+name: Keep workflows alive
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+jobs:
+  keep-github-actions-alive:
+    name: Cronjob based GitHub action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep your GitHub Actions alive automatically
+        uses: Entepotenz/keep-github-actions-alive-min-dependencies@v1
