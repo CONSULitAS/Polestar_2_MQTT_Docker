@@ -19,7 +19,7 @@ COPY Polestar_2_MQTT.py requirements.txt ./
 # Installieren der erforderlichen Python-Pakete
 RUN <<EOF
     python -m venv venv
-    apt -q update -y && apt -q upgrade -y
+    apt update -qq -y && apt upgrade -qq -y
     pip -q install --upgrade pip
     pip -q install -r requirements.txt
 EOF
