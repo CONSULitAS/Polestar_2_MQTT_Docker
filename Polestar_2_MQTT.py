@@ -98,12 +98,13 @@ def perform_login(email, password, path_token, cookie):
 
     # handle missing code (e.g., accepting terms and conditions)
     if code is None and uid:
+        print("fehlenden Code behandeln")
         data = {"pf.submit": True, "subject": uid}
         url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping"
         response = requests.post(url, headers=headers, data=data, allow_redirects=False)
+        # TODO: try / except
         code    = response.headers['Location'].split("code=")[1].split("&")[0]
-        print("  GOT CODE!       = " + str(code))
-
+        print("  GOT CODE!  = " + str(code))
     return code
 
 # Funktion zum Abrufen des API-Tokens
