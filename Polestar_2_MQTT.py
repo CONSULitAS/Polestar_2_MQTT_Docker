@@ -19,17 +19,16 @@ TZ                      =     os.getenv('TZ')                       # z.B. 'Euro
 MQTT_BROKER             =     os.getenv("MQTT_BROKER",    "localhost")
 MQTT_PORT               = int(os.getenv("MQTT_PORT",      1883))
 MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE", 60))
+MQTT_USER               = os.getenv("MQTT_USER")
+MQTT_PASSWORD           = os.getenv("MQTT_PASSWORD")
 
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
 CLIENT_ID               =     "l3oopkc_10"
-# TODO: MQTT-Credentials
 
 # MQTT-Client-Setup
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
-# TODO: Migrate to MQTT-Client V2
-# https://github.com/eclipse/paho.mqtt.python/blob/v2.0.0/docs/migrations.rst
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties):
     print("Connected with result code "+str(rc))
 
 def on_disconnect(client, userdata, rc):
@@ -40,6 +39,7 @@ def on_disconnect(client, userdata, rc):
 
 # Verbindung zum MQTT Broker
 def connect_mqtt():
+    client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
     client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
