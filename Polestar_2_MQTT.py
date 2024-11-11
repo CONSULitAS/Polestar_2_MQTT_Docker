@@ -19,8 +19,8 @@ TZ                      =     os.getenv('TZ')                       # z.B. 'Euro
 MQTT_BROKER             =     os.getenv("MQTT_BROKER",    "localhost")
 MQTT_PORT               = int(os.getenv("MQTT_PORT",      1883))
 MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE", 60))
-MQTT_USER               = os.getenv("MQTT_USER")
-MQTT_PASSWORD           = os.getenv("MQTT_PASSWORD")
+MQTT_USER               =     os.getenv("MQTT_USER")
+MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD")
 
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
 CLIENT_ID               =     "l3oopkc_10"
@@ -39,6 +39,7 @@ def on_disconnect(client, userdata, rc, properties, reason_code):
 
 # Verbindung zum MQTT Broker
 def connect_mqtt():   
+    # MQTT_USER und MQTT_PASSWORD muss leer bleiben, wenn kein Login am Broker
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)   
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
