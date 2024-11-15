@@ -1,8 +1,20 @@
+#
+# Docker: CONSULitAS/Polestar_2_MQTT_Docker
+#
+# (C) CONSULitAS, Dr. Jochen Groppe, 2024 - GPL V3
+#
+# https://github.com/CONSULitAS/Polestar_2_MQTT_Docker/tree/main
+#
+# Docker Container with gateway between Polestar API and MQTT
+#
+# edit values under "environment:" to match your needs
+
 #version: '3.8' (deprecated)
 
 services:
   polestar2mqtt:
-    build: .
+    # build: . # only used for local build
+    image: consulitas/polestar_2_mqtt_docker:latest
     container_name: "polestar2mqtt"
     restart: always
     environment:
@@ -10,11 +22,14 @@ services:
       POLESTAR_EMAIL:    "xx@xxx"
       POLESTAR_PASSWORD: "XXX"
       POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx"
-      POLESTAR_CYCLE:    300 # Sekunden
+      POLESTAR_CYCLE:    300 # seconds
       MQTT_BROKER:       "192.168.1.100"
       MQTT_PORT:         "1883"
-      MQTT_USER:         "" # muss leer bleiben, wenn kein Login beim Broker erforderlich
-      MQTT_PASSWORD:     "" # s.o.
+      MQTT_USER:         "" # has to be empty ("") if broker has no password
+      MQTT_PASSWORD:     "" # has to be empty ("") if broker has no password
       BASE_TOPIC:        "polestar2"
+    labels:
+      # automatic update using Watchtower (https://github.com/containrrr/watchtower) highly recommended
+      - "com.centurylinklabs.watchtower.enable=true"
 
 # ***** EOF *****
