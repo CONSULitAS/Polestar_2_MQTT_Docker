@@ -7,7 +7,12 @@
 #
 # Docker Container with gateway between Polestar API and MQTT
 #
-# edit values under "environment:" to match your needs
+# Get it up and running:
+# - install docker
+# - download and rename this file to 'docker-compose.yml' (remove '_example')
+# - edit values under 'environment:' to match your needs
+# - no volumes or network needed
+# - start container with 'docker compose up'
 
 #version: '3.8' (deprecated)
 
