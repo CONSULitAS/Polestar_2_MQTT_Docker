@@ -156,7 +156,7 @@ def get_token(email, password):
 
 # Funktion zum Abrufen von Fahrzeugdaten
 def get_car_data(vin, access_token):
-    url = "https://pc-api.polestar.com/eu-north-1/my-star"
+    url = "https://pc-api.polestar.com/eu-north-1/mystar-v2"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
