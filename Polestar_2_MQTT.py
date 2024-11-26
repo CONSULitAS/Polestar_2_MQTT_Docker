@@ -24,7 +24,8 @@ MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD")
 
 OPENWB_HOST             =     os.getenv("OPENWB_HOST",    "localhost")
 OPENWB_PORT             = int(os.getenv("OPENWB_PORT",    1883))
-OPENWB_TOPIC            =     os.getenv("OPENWB_TOPIC",   "openWB/set/lp/1/%Soc")
+OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
+OPENWB_TOPIC            =     "openWB/set/lp/" + str(OPENWB_LP_NUM) + "/%Soc"
 OPENWB_PUBLISH          =     os.getenv("OPENWB_PUBLISH", False)
 
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
@@ -298,7 +299,7 @@ def publish_soc_to_openwb(battery_data):
     if isinstance(battery_data, dict):
         soc = battery_data['getBatteryData']['batteryChargeLevelPercentage']
         print(f'publishing SoC {soc} to OpenWB {OPENWB_TOPIC}')
-        print(client_openwb.publish(OPENWB_TOPIC,soc,qos=1, retain=True))
+        client_openwb.publish(OPENWB_TOPIC,soc,qos=1, retain=True)
 
 
 # Hauptprogramm

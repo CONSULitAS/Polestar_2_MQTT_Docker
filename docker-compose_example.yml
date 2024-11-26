@@ -38,7 +38,8 @@ services:
       #OPENWB_HOST:   "openwb.lan or ip address of OpenWB"
       #OPENWB_PUBLISH:  True
       #OPENWB_PORT:     1883 # default 1883 if unset
-      #OPENWB_TOPIC:    "openWB/set/lp/1/%Soc" # default openWB/set/lp/1/%Soc change for other LP
+      #OPENWB_LP_NUM:   1 # optional: defaults to 1 change for other LP
+
 
     labels:
       # automatic update using Watchtower (https://github.com/containrrr/watchtower) highly recommended

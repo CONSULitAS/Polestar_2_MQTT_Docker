@@ -11,7 +11,7 @@ If ChatGPT has been involved in development steps here, this will be shown in th
 
 Heads up: This is work in progress, but now usable.
 * Pull requests welcome!
-* Issues wellcome!
+* Issues welcome!
 
 Get it up and running:
 * install Docker (https://docs.docker.com/engine/install/)
@@ -27,4 +27,4 @@ https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
 ## direct forwarding to OpenWB v1:
 * set `OPENWB_HOST:	 "ip/dns name of openWB"`
 * set `OPENWB_PUBLISH:	 True`
-* optionally set `OPENWB_PORT` and `OPENWB_TOPIC` - if not set it defaults to port 1883 and OpenWB topic `openWB/set/lp/1/%Soc`
+* optionally set `OPENWB_PORT` and `OPENWB_LP_NUM` - if not set it defaults to port 1883 and 1 (which results in topic `openWB/set/lp/1/%Soc`)
