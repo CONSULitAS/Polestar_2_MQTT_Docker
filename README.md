@@ -23,3 +23,8 @@ Get it up and running:
 
 Discussions (in german ) here:
 https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
+
+## direct forwarding to OpenWB v1:
+* set `OPENWB_HOST:	 "ip/dns name of openWB"`
+* set `OPENWB_PUBLISH:	 True`
+* optionally set `OPENWB_PORT` and `OPENWB_TOPIC` - if not set it defaults to port 1883 and OpenWB topic `openWB/set/lp/1/%Soc`
