@@ -1,22 +1,22 @@
 # How to Configure a Docker Container for Synology
 
-With Synology's interface, Docker automatically generates a `docker-compose.yml` in the background when setting up a container (see [Synology Knowledge Center | Creating a Container](https://kb.synology.com/)). 
+With Synology's interface, Docker automatically generates a `docker-compose.yml` in the background when setting up a container (see [Erstellen eines Containers | Docker - Synology Knowledge Center](https://kb.synology.com/de-de/DSM/help/Docker/docker_container?version=6)). 
 
 To ensure the correct configuration for this specific container, you need to input the appropriate data into the Synology UI for the desired result.
 
 ## Steps to Configure the Container
 
-1. **Download the Docker Image**  
+1. **Download the Docker Image**
    Pull the image `consulitas/polestar_2_mqtt_docker:latest` from the Docker registry.
 
-2. **Set the Environment Variables**  
+2. **Set the Environment Variables**
    - Go to the **Advanced Settings** of the container configuration in the Synology UI.
    - Navigate to the **Environment** tab (refer to the linked guide above for detailed instructions).
    - Enter the following variables in the Synology UI. Adjust the values to suit your requirements.
 
-   | Name             | Value               | Comment                                   |
-   |------------------|---------------------|-------------------------------------------|
-   | TZ               | Europe/Berlin      | Timezone                                  |
+   | Name             | Value              | Comment                                  |
+   |------------------|--------------------|------------------------------------------|
+   | TZ               | Europe/Berlin      | Timezone                                 |
    | POLESTAR_EMAIL   | xx@xxx             | Replace with your email                  |
    | POLESTAR_PASSWORD| XXX                | Replace with your password               |
    | POLESTAR_VIN     | LPSVSEDEEMLxxxxxx  | Replace with your vehicle's VIN          |
@@ -27,7 +27,7 @@ To ensure the correct configuration for this specific container, you need to inp
    | MQTT_PASSWORD    |                    | Leave empty if no password is required   |
    | MQTT_BASE_TOPIC  | polestar2          | Base MQTT topic                          |
 
-3. **Ignore Additional Settings**  
+3. **Ignore Additional Settings**
    - You **do not need to configure** volumes, networks, ports, or links for this container.
 
 ## Notes
