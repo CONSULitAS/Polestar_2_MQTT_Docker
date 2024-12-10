@@ -9,6 +9,8 @@ import json
 from datetime import datetime, timedelta
 import pytz
 import paho.mqtt.client as mqtt
+import urllib.parse
+
 
 # Umgebungsvariablen lesen
 POLESTAR_EMAIL          =     os.getenv('POLESTAR_EMAIL')
@@ -23,7 +25,16 @@ MQTT_USER               =     os.getenv("MQTT_USER")
 MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD")
 
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
-CLIENT_ID               =     "l3oopkc_10"
+
+# API config
+POLESTAR_BASE_URL     = "https://pc-api.polestar.com/eu-north-1"
+POLESTAR_API_URL_V2   = f"{POLESTAR_BASE_URL}/mystar-v2"
+#POLESTAR_API_URL      = f"{POLESTAR_BASE_URL}/my-star"
+POLESTAR_REDIRECT_URI = "https://www.polestar.com/sign-in-callback"
+#POLESTAR_ICON         = "https://www.polestar.com/w3-assets/coast-228x228.png"
+CLIENT_ID             = "l3oopkc_10"
+CODE_VERIFIER         = "polestar-ios-widgets-are-enabled-by-scriptable"
+CODE_CHALLENGE        = "adYJTSAVqq6CWBJn7yNdGKwcsmJb8eBewG8WpxnUzaE"
 
 # MQTT-Client-Setup
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -53,9 +64,19 @@ def get_local_time(tz, time):
     # Ausgabe des Zeitstempels in tz
     return local_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
 
-# Funktion zum Abrufen des Login-Tokens und der Cookies
+# Funktion zum Abrufen des Login-Tokens und der Cookies (in polestar-xxx-widget.js: getLoginFlowTokens())
 def get_login_tokens():
-    url = f"https://polestarid.eu.polestar.com/as/authorization.oauth2?response_type=code&client_id={CLIENT_ID}&redirect_uri=https://www.polestar.com%2Fsign-in-callback&scope=openid+profile+email+customer%3Aattributes"
+    # Dictionary mit den URL-Parametern
+    params = urllib.parse.urlencode({
+        "response_type":         "code",
+        "client_id":             CLIENT_ID,
+        "redirect_uri":          POLESTAR_REDIRECT_URI,
+        "scope":                 "openid profile email customer:attributes",
+        "state":                 "ea5aa2860f894a9287a4819dd5ada85c",
+        "code_challenge":        CODE_CHALLENGE,
+        "code_challenge_method": "S256",
+    })
+    url = f"https://polestarid.eu.polestar.com/as/authorization.oauth2?{params}"
     response = requests.get(url, allow_redirects=False)
     if response.status_code not in [302, 303]: # = 'see other'
         print("  response.status_code = " + str(response.status_code))
@@ -70,7 +91,7 @@ def get_login_tokens():
 
 # Funktion zum Einloggen und Abrufen des autorisierten Codes
 def perform_login(email, password, path_token, cookie):
-    url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping"
+    url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Cookie": cookie
@@ -100,7 +121,7 @@ def perform_login(email, password, path_token, cookie):
     if code is None and uid:
         print("fehlenden Code behandeln")
         data = {"pf.submit": True, "subject": uid}
-        url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping"
+        url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
         response = requests.post(url, headers=headers, data=data, allow_redirects=False)
         # TODO: try / except
         code    = response.headers['Location'].split("code=")[1].split("&")[0]
@@ -108,29 +129,25 @@ def perform_login(email, password, path_token, cookie):
     return code
 
 # Funktion zum Abrufen des API-Tokens
-def get_api_token(code):
-    url = "https://pc-api.polestar.com/eu-north-1/auth/"
+def get_api_token(tokenRequestCode):
+    url = "https://polestarid.eu.polestar.com/as/token.oauth2"
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/x-www-form-urlencoded"
     }
+    # URL-Encoded Daten als Dictionary (requests macht die URL-Codierung automatisch)
     payload = {
-        "query": "query getAuthToken($code: String!){"
-                    "getAuthToken(code: $code){"
-                        "id_token,"
-                        "access_token,"
-                        "refresh_token,"
-                        "expires_in"
-                    "}"
-                 "}",
-        "operationName": "getAuthToken",
-        "variables": json.dumps({"code": code})
+        "grant_type":    "authorization_code",
+        "code":          tokenRequestCode,
+        "code_verifier": CODE_VERIFIER,
+        "client_id":     CLIENT_ID,
+        "redirect_uri":  POLESTAR_REDIRECT_URI
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, data=payload)
     if response.status_code != 200 or "errors" in response.json():
         print("  response.status_code = " + str(response.status_code))
         print(json.dumps(response.json(), indent=2))
         raise Exception("get_api_token(): API-Token-Anfrage fehlgeschlagen")
-    api_creds     = response.json()['data']['getAuthToken']
+    api_creds     = response.json() #['data']['getAuthToken']
     access_token  = api_creds['access_token']
     refresh_token = api_creds['refresh_token']
     expires_in    = api_creds['expires_in']
