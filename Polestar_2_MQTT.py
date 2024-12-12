@@ -16,13 +16,19 @@ import urllib.parse
 POLESTAR_EMAIL          =     os.getenv('POLESTAR_EMAIL')
 POLESTAR_PASSWORD       =     os.getenv('POLESTAR_PASSWORD')
 POLESTAR_VIN            =     os.getenv('POLESTAR_VIN')
-POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE'))          # Sekunden
+POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE', 300))     # Sekunden
 TZ                      =     os.getenv('TZ')                       # z.B. 'Europe/Berlin'
 MQTT_BROKER             =     os.getenv("MQTT_BROKER",    "localhost")
 MQTT_PORT               = int(os.getenv("MQTT_PORT",      1883))
 MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE", 60))
 MQTT_USER               =     os.getenv("MQTT_USER")
 MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD")
+
+OPENWB_HOST             =     os.getenv("OPENWB_HOST",    "localhost")
+OPENWB_PORT             = int(os.getenv("OPENWB_PORT",    1883))
+OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
+OPENWB_TOPIC            =     "openWB/set/lp/" + str(OPENWB_LP_NUM) + "/%Soc"
+OPENWB_PUBLISH          =     os.getenv("OPENWB_PUBLISH", False)
 
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
 
@@ -38,6 +44,9 @@ CODE_CHALLENGE        = "adYJTSAVqq6CWBJn7yNdGKwcsmJb8eBewG8WpxnUzaE"
 
 # MQTT-Client-Setup
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+
+if (OPENWB_PUBLISH):
+    client_openwb = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 def on_connect(client, userdata, flags, rc, properties):
     print("Connected with result code "+str(rc))
@@ -56,6 +65,13 @@ def connect_mqtt():
     client.on_disconnect = on_disconnect
     client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
     client.loop_start()
+
+# Verbindung zur OpenWB
+def connect_mqtt_openwb():   
+    client_openwb.on_connect = on_connect
+    client_openwb.on_disconnect = on_disconnect
+    client_openwb.connect(OPENWB_HOST, OPENWB_PORT, MQTT_KEEPALIVE_INTERVAL)
+    client_openwb.loop_start()
 
 def get_local_time(tz, time):
     # Konvertierung in die Zeitzone tz (z.B. Europe/Berlin)
@@ -296,6 +312,13 @@ def publish_json_as_mqtt(topic, json_obj):
         json_payload = json.dumps(json_obj)
         client.publish(topic, json_payload, qos=1, retain=True)
 
+def publish_soc_to_openwb(battery_data):
+    if isinstance(battery_data, dict):
+        soc = battery_data['getBatteryData']['batteryChargeLevelPercentage']
+        print(f'publishing SoC {soc} to OpenWB {OPENWB_TOPIC}')
+        client_openwb.publish(OPENWB_TOPIC,soc,qos=1, retain=True)
+
+
 # Hauptprogramm
 def main():
     print("Polestar_2_MQTT.py startet")
@@ -308,6 +331,8 @@ def main():
 
     # Starten der MQTT-Verbindung
     connect_mqtt()
+    if (OPENWB_PUBLISH):
+        connect_mqtt_openwb()
 
     while True:
         # TODO: MQTT-Versand der Daten
@@ -332,6 +357,8 @@ def main():
             last_battery_data = battery_data
             # Daten als MQTT-Nachrichten senden
             publish_json_as_mqtt(BASE_TOPIC, battery_data)
+            if OPENWB_PUBLISH:
+                publish_soc_to_openwb(battery_data)
         
         print("get_odometer_data()")
         odometer_data = get_odometer_data(POLESTAR_VIN, access_token)
