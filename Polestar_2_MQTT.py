@@ -1,88 +1,127 @@
 #!/usr/bin/python3
 
+#
+# Polestar_2_MQTT.py
+#
+# (c) @CONSULitAS 2024
+# 
+
+# TODO: PKCE challenge
+# TODO: token refresh
+# TODO: openWB URL
+# TODO: better error handling
+
 import traceback
 import os
 import sys
 import requests
 import time
-import json
 from datetime import datetime, timedelta
 import pytz
+import json
 import paho.mqtt.client as mqtt
 import urllib.parse
 
+#####################################
+# read ENVIRONMENT variables
 
-# Umgebungsvariablen lesen
+# general
+TZ                      =     os.getenv('TZ',                "Europe/Berlin")
+
+# credentials for Polestar API
 POLESTAR_EMAIL          =     os.getenv('POLESTAR_EMAIL')
 POLESTAR_PASSWORD       =     os.getenv('POLESTAR_PASSWORD')
 POLESTAR_VIN            =     os.getenv('POLESTAR_VIN')
-POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE', 300))     # Sekunden
-TZ                      =     os.getenv('TZ')                       # z.B. 'Europe/Berlin'
-MQTT_BROKER             =     os.getenv("MQTT_BROKER",    "localhost")
-MQTT_PORT               = int(os.getenv("MQTT_PORT",      1883))
-MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE", 60))
-MQTT_USER               =     os.getenv("MQTT_USER")
-MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD")
+POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE',    "300")) # seconds
 
+# MQTT broker
+MQTT_BROKER             =     os.getenv("MQTT_BROKER",       "localhost") # IP or DNS name
+MQTT_PORT               = int(os.getenv("MQTT_PORT",         1883))
+MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE",    60))
+MQTT_USER               =     os.getenv("MQTT_USER",         "")
+MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD",     "")
+BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
+
+# openWB - optional
+OPENWB_PUBLISH          =     os.getenv("OPENWB_PUBLISH", False) # default: no openWB 
 OPENWB_HOST             =     os.getenv("OPENWB_HOST",    "localhost")
 OPENWB_PORT             = int(os.getenv("OPENWB_PORT",    1883))
 OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
-OPENWB_TOPIC            =     "openWB/set/lp/" + str(OPENWB_LP_NUM) + "/%Soc"
-OPENWB_PUBLISH          =     os.getenv("OPENWB_PUBLISH", False)
+#OPENWB_TOPIC            =     os.getenv("OPENWB_TOPIC",   "openWB/set/lp{OPENWB_LP_NUM}/%Soc")
 
-BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
+#####################################
+# global init
 
 # API config
 POLESTAR_BASE_URL     = "https://pc-api.polestar.com/eu-north-1"
 POLESTAR_API_URL_V2   = f"{POLESTAR_BASE_URL}/mystar-v2"
-#POLESTAR_API_URL      = f"{POLESTAR_BASE_URL}/my-star"
 POLESTAR_REDIRECT_URI = "https://www.polestar.com/sign-in-callback"
-#POLESTAR_ICON         = "https://www.polestar.com/w3-assets/coast-228x228.png"
+POLESTAR_ID_URI       = "https://polestarid.eu.polestar.com/as"
 CLIENT_ID             = "l3oopkc_10"
-CODE_VERIFIER         = "polestar-ios-widgets-are-enabled-by-scriptable"
+CODE_VERIFIER         = "polestar-ios-widgets-are-enabled-by-scriptable" # TODO: real challenge
 CODE_CHALLENGE        = "adYJTSAVqq6CWBJn7yNdGKwcsmJb8eBewG8WpxnUzaE"
 
-# MQTT-Client-Setup
+# setup MQTT-Client
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
+# setup MQTT-Client for openWB if needed
 if (OPENWB_PUBLISH):
+    OPENWB_TOPIC  = "openWB/set/lp/" + str(OPENWB_LP_NUM) + "/%Soc" # TODO: use ENV string
     client_openwb = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-def on_connect(client, userdata, flags, rc, properties):
-    print("Connected with result code "+str(rc))
+#####################################
+# MQTT helper functions
 
+# callback for MQTT connection handling
+def on_connect(client, userdata, flags, rc, properties):
+    print(f"MQTT connected with result code '{rc}'.")
+
+# callback for MQTT disconnection handling
 def on_disconnect(client, userdata, rc, properties, reason_code):
     if rc != 0:
-        print("Unexpected disconnection.")
-        # Reconnect
+        print("MQTT disconnected unexpected with reason code '{reason_code}'.")
+        # try to reconnect
         client.reconnect()
 
-# Verbindung zum MQTT Broker
+# connect to MQTT broker
 def connect_mqtt():   
-    # MQTT_USER und MQTT_PASSWORD muss leer bleiben, wenn kein Login am Broker
+    # MQTT_USER and MQTT_PASSWORD have to be empty if no login to broker configured
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)   
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
+    client.on_connect     = on_connect
+    client.on_disconnect  = on_disconnect
     client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
     client.loop_start()
 
-# Verbindung zur OpenWB
+# connect to OpenWB built in MQTT broker
 def connect_mqtt_openwb():   
-    client_openwb.on_connect = on_connect
+    client_openwb.on_connect    = on_connect
     client_openwb.on_disconnect = on_disconnect
     client_openwb.connect(OPENWB_HOST, OPENWB_PORT, MQTT_KEEPALIVE_INTERVAL)
     client_openwb.loop_start()
 
+#####################################
+# helper functions
+
 def get_local_time(tz, time):
-    # Konvertierung in die Zeitzone tz (z.B. Europe/Berlin)
+    # convert to local timezone in tz (e.g. Europe/Berlin)
     local_time = time.astimezone(pytz.timezone(tz))
 
-    # Ausgabe des Zeitstempels in tz
+    # as formated time stamp
     return local_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
 
-# Funktion zum Abrufen des Login-Tokens und der Cookies (in polestar-xxx-widget.js: getLoginFlowTokens())
-def get_login_tokens():
-    # Dictionary mit den URL-Parametern
+def wait_and_die(message, exception):
+    print(message)
+    time.sleep(POLESTAR_CYCLE)  # wait POLESTAR_CYCLE seconds to reduce retry count
+    raise Exception(exception)
+    
+    return # never!
+
+#####################################
+# login to Polestar API
+
+# get login token and cookies (polestar-xxx-widget.js: getLoginFlowTokens())
+def get_path_token():
+    # dictionary with parameters encoded in URL
     params = urllib.parse.urlencode({
         "response_type":         "code",
         "client_id":             CLIENT_ID,
@@ -92,65 +131,72 @@ def get_login_tokens():
         "code_challenge":        CODE_CHALLENGE,
         "code_challenge_method": "S256",
     })
-    url = f"https://polestarid.eu.polestar.com/as/authorization.oauth2?{params}"
+    url = f"{POLESTAR_ID_URI}/authorization.oauth2?{params}"
     response = requests.get(url, allow_redirects=False)
+    
     if response.status_code not in [302, 303]: # = 'see other'
-        print("  response.status_code = " + str(response.status_code))
-        raise Exception("get_login_tokens(): Login-Token-Anfrage fehlgeschlagen")
+        wait_and_die(f"  response.status_code = {response.status_code}",
+                     "get_login_tokens(): login token not successfuly received")
+    
     cookies    = response.headers.get('Set-Cookie')
     cookie     = cookies.split(';')[0]
     path_token = response.headers.get('Location').split("resumePath=")[1].split("&")[0]
-    print("  cookies    = " + str(cookies))
-    print("  cookie     = " + str(cookie))
-    print("  path_token = " + str(path_token))
+    print(f"  cookies    = {cookies}")
+    print(f"  cookie     = {cookie}")
+    print(f"  path_token = {path_token}")
+    
     return path_token, cookie
 
-# Funktion zum Einloggen und Abrufen des autorisierten Codes
+# login with token and credentials to get the code
 def perform_login(email, password, path_token, cookie):
-    url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
+    url = f"{POLESTAR_ID_URI}/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Cookie": cookie
     }
     data = f"pf.username={email}&pf.pass={password}"
     response = requests.post(url, headers=headers, data=data, allow_redirects=False)
+    
     if response.status_code not in [302, 303]:
-        print("  response.status_code = " + str(response.status_code))
-        raise Exception("perform_login(): Login fehlgeschlagen")
+        wait_and_die(f"  response.status_code = {response.status_code}",
+                     "perform_login(): login not successful, check your credentials")
 
     max_age = response.headers['Strict-Transport-Security'].split("max-age=")[1].split(";")[0]
-    print(    "  max_age    = " + str(max_age))
+    print(    f"  max_age    = {max_age}")
+    
     try:
         uid    = response.headers['Location'].split("uid=")[1].split("&")[0]
-        print("  uid        = " + str(uid))
+        print(f"  uid        = {uid}")
     except:
         uid = None
-        print("  uid        =  NONE")
+        print( "  uid        = NONE")
+    
     try:
         code    = response.headers['Location'].split("code=")[1].split("&")[0]
-        print("  code       = " + str(code))
+        print(f"  code       = {code}")
     except:
         code = None
-        print("  code       = NONE")
+        print( "  code       = NONE")
 
-    # handle missing code (e.g., accepting terms and conditions)
+    # handle missing code (e.g. accepting terms and conditions)
     if code is None and uid:
-        print("fehlenden Code behandeln")
+        print("   handle missing code")
         data = {"pf.submit": True, "subject": uid}
-        url = f"https://polestarid.eu.polestar.com/as/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
+        url = f"{POLESTAR_ID_URI}/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
         response = requests.post(url, headers=headers, data=data, allow_redirects=False)
         # TODO: try / except
         code    = response.headers['Location'].split("code=")[1].split("&")[0]
-        print("  GOT CODE!  = " + str(code))
+        print(f"   code = {code}")
+    
     return code
 
-# Funktion zum Abrufen des API-Tokens
+# get API tokens
 def get_api_token(tokenRequestCode):
-    url = "https://polestarid.eu.polestar.com/as/token.oauth2"
+    url = f"{POLESTAR_ID_URI}/token.oauth2"
     headers = {
         "Content-Type": "application/x-www-form-urlencoded"
     }
-    # URL-Encoded Daten als Dictionary (requests macht die URL-Codierung automatisch)
+    # dictionary for URL encoded data (requests will to the encoding)
     payload = {
         "grant_type":    "authorization_code",
         "code":          tokenRequestCode,
@@ -159,24 +205,27 @@ def get_api_token(tokenRequestCode):
         "redirect_uri":  POLESTAR_REDIRECT_URI
     }
     response = requests.post(url, headers=headers, data=payload)
+    
     if response.status_code != 200 or "errors" in response.json():
-        print("  response.status_code = " + str(response.status_code))
-        print(json.dumps(response.json(), indent=2))
-        raise Exception("get_api_token(): API-Token-Anfrage fehlgeschlagen")
-    api_creds     = response.json() #['data']['getAuthToken']
+        wait_and_die("  response.status_code = {response.status_code}\n"
+                     + json.dumps(response.json(), indent=2).
+                     "get_api_token(): no API token received")
+    
+    api_creds     = response.json()
     access_token  = api_creds['access_token']
     refresh_token = api_creds['refresh_token']
     expires_in    = api_creds['expires_in']
     expiry_time   = datetime.now() + timedelta(seconds=expires_in)
     print("  access_token  = " + str(access_token)[0:39] + "...")
-    print("  refresh_token = " + str(refresh_token))
-    print("  expires_in    = " + str(expires_in))
+    print("  refresh_token = {refresh_token}")
+    print("  expires_in    = {expires_in}")
     print("  expiry_time   = " + get_local_time(TZ, expiry_time))
+    
     return access_token, expiry_time, refresh_token
 
 def get_token(email, password):
-    print(" get_login_tokens()")
-    path_token, cookie = get_login_tokens()
+    print(" get_path_token()")
+    path_token, cookie = get_path_token()
     print(" perform_login()")
     auth_code = perform_login(email, password, path_token, cookie)
     print(" get_api_token()")
@@ -187,9 +236,12 @@ def get_token(email, password):
 # unbekannter API-Endpoint
 #        "query": "\n  query getCarSpecifications($locale: SiteLocale) {\n    loggedinCarSpecification(locale: $locale) {\n      title {\n        key\n        value\n      }\n      specificationGroups {\n        groupId\n        label {\n          key\n          value\n        }\n        rows {\n          specificationId\n          label {\n            key\n            value\n          }\n        }\n      }\n      chargeport {\n        value\n      }\n    }\n  }\n",
 
+#####################################
+# read data from Polestar API
+
 # Funktion zum Abrufen von Fahrzeugdaten
 def get_car_data(vin, access_token):
-    url = "https://pc-api.polestar.com/eu-north-1/mystar-v2"
+    url = POLESTAR_API_URL_V2
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
@@ -239,7 +291,7 @@ def get_car_data(vin, access_token):
 
 # Funktion zum Abrufen von Batteriedaten
 def get_battery_data(vin, access_token):
-    url = "https://pc-api.polestar.com/eu-north-1/mystar-v2"
+    url = POLESTAR_API_URL_V2
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
@@ -274,7 +326,7 @@ def get_battery_data(vin, access_token):
 
 # Funktion zum Abrufen von Odometerdaten
 def get_odometer_data(vin, access_token):
-    url = "https://pc-api.polestar.com/eu-north-1/mystar-v2"
+    url = POLESTAR_API_URL_V2
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
@@ -347,7 +399,7 @@ def main():
         if car_data != last_car_data:
             print(json.dumps(car_data, indent=4))
             last_car_data = car_data
-            # Daten als MQTT-Nachrichten senden
+            # send changed JSON as MQTT tree
             publish_json_as_mqtt(BASE_TOPIC +"/getConsumerCarsV2", car_data)
 
         print("get_battery_data()")
@@ -355,7 +407,7 @@ def main():
         if battery_data != last_battery_data:
             print(json.dumps(battery_data, indent=4))
             last_battery_data = battery_data
-            # Daten als MQTT-Nachrichten senden
+            # send changed JSON as MQTT tree
             publish_json_as_mqtt(BASE_TOPIC, battery_data)
             if OPENWB_PUBLISH:
                 publish_soc_to_openwb(battery_data)
@@ -365,10 +417,10 @@ def main():
         if odometer_data != last_odometer_data:
             print(json.dumps(odometer_data, indent=4))
             last_odometer_data = odometer_data
-            # Daten als MQTT-Nachrichten senden
+            # send changed JSON as MQTT tree
             publish_json_as_mqtt(BASE_TOPIC, odometer_data)
 
-        time.sleep(POLESTAR_CYCLE)  # wartet POLESTAR_CYCLE Sekunden
+        time.sleep(POLESTAR_CYCLE)  # wait POLESTAR_CYCLE seconds
 
 # Signal-Handler für SIGTERM
 def signal_handler(sig, frame):

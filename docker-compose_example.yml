@@ -26,20 +26,19 @@ services:
       TZ:                "Europe/Berlin"
       POLESTAR_EMAIL:    "xx@xxx"
       POLESTAR_PASSWORD: "XXX"
-      POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx"
+      POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx" # no spaces allowed
       POLESTAR_CYCLE:    300 # seconds
-      MQTT_BROKER:       "192.168.1.100"
+      MQTT_BROKER:       "192.168.1.100" # IP or DNS name
       MQTT_PORT:         "1883"
       MQTT_USER:         "" # has to be empty ("") if broker has no password
       MQTT_PASSWORD:     "" # has to be empty ("") if broker has no password
       BASE_TOPIC:        "polestar2"
 
       # optional SoC forwarding to OpenWB v1 (e.g. if no NodeRed installation is available)
-      #OPENWB_HOST:   "openwb.lan or ip address of OpenWB"
+      #OPENWB_HOST:     "openwb.lan or ip address of OpenWB"
       #OPENWB_PUBLISH:  True
       #OPENWB_PORT:     1883 # default 1883 if unset
-      #OPENWB_LP_NUM:   1 # optional: defaults to 1 change for other LP
-
+      #OPENWB_LP_NUM:   1 # optional: defaults to 1, change for other LP
 
     labels:
       # automatic update using Watchtower (https://github.com/containrrr/watchtower) highly recommended
