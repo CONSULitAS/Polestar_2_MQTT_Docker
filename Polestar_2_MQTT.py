@@ -10,10 +10,12 @@
 # TODO: token refresh
 # TODO: openWB URL
 # TODO: better error handling
+# TODO: report online/offline state on MQTT
 
 import traceback
 import os
 import sys
+import signal
 import requests
 import time
 from datetime import datetime, timedelta
@@ -51,6 +53,9 @@ OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
 
 #####################################
 # global init
+
+# constants
+SLEEP_INTERVAL        = 0.1
 
 # API config
 POLESTAR_BASE_URL     = "https://pc-api.polestar.com/eu-north-1"
@@ -208,7 +213,7 @@ def get_api_token(tokenRequestCode):
     
     if response.status_code != 200 or "errors" in response.json():
         wait_and_die("  response.status_code = {response.status_code}\n"
-                     + json.dumps(response.json(), indent=2).
+                     + json.dumps(response.json(), indent=2),
                      "get_api_token(): no API token received")
     
     api_creds     = response.json()
@@ -381,14 +386,15 @@ def main():
     last_battery_data  = None
     last_odometer_data = None
 
+    # init sinal handler
+    signal.signal(signal.SIGTERM, signal_handler)
+
     # Starten der MQTT-Verbindung
     connect_mqtt()
     if (OPENWB_PUBLISH):
         connect_mqtt_openwb()
 
     while True:
-        # TODO: MQTT-Versand der Daten
-
         if expiry_time == None or datetime.now() >= expiry_time:
             # TODO WORKAROUND: neu einloggen, statt refresh_token nutzen
             print("get_token()")
@@ -420,12 +426,19 @@ def main():
             # send changed JSON as MQTT tree
             publish_json_as_mqtt(BASE_TOPIC, odometer_data)
 
-        time.sleep(POLESTAR_CYCLE)  # wait POLESTAR_CYCLE seconds
+        # wait POLESTAR_CYCLE seconds, but don't block
+        print( "********************************************************************************")
+        print(f"wait for {POLESTAR_CYCLE} seconds")
+        for _ in range(int(POLESTAR_CYCLE/SLEEP_INTERVAL)):
+            time.sleep(SLEEP_INTERVAL)
 
 # Signal-Handler für SIGTERM
 def signal_handler(sig, frame):
-    print("SIGTERM erhalten. Beende das Programm.")
+    print("SIGTERM received: stop run")
     server.shutdown()
+    client.disconnect()
+    if (OPENWB_PUBLISH):
+        client_openwb.disconnect()
     sys.exit(0)
 
 try:
