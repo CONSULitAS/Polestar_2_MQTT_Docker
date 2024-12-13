@@ -43,6 +43,7 @@ MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE",    60))
 MQTT_USER               =     os.getenv("MQTT_USER",         "")
 MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD",     "")
 BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
+MQTT_BASE_TOPIC         =     BASE_TOPIC # TODO TMP: for backward compatibility
 
 # openWB - optional
 OPENWB_PUBLISH          =     os.getenv("OPENWB_PUBLISH", False) # default: no openWB 
@@ -55,7 +56,10 @@ OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
 # global init
 
 # internal constants
-SLEEP_INTERVAL        = 0.1
+SLEEP_INTERVAL         = 0.1
+MQTT_LWT_TOPIC         = f"{MQTT_BASE_TOPIC}/container/online"
+MQTT_LWT_MESSAGE_DEAD  = "offline"
+MQTT_LWT_MESSAGE_ALIVE = "online"
 
 # API config
 POLESTAR_BASE_URL     = "https://pc-api.polestar.com/eu-north-1"
@@ -68,6 +72,13 @@ CODE_CHALLENGE        = "adYJTSAVqq6CWBJn7yNdGKwcsmJb8eBewG8WpxnUzaE"
 
 # setup MQTT-Client
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+# Last Will and Testament (LWT)
+client.will_set(
+    topic   = MQTT_LWT_TOPIC,
+    payload = MQTT_LWT_MESSAGE_DEAD,
+    qos     = 1,
+    retain  = True
+)
 
 # setup MQTT-Client for openWB if needed
 if (OPENWB_PUBLISH):
@@ -79,7 +90,9 @@ if (OPENWB_PUBLISH):
 
 # callback for MQTT connection handling
 def on_connect(client, userdata, flags, rc, properties):
-    print(f"MQTT connected with result code '{rc}'.")
+    print(f"MQTT connected with result code '{rc}': {MQTT_LWT_TOPIC}={MQTT_LWT_MESSAGE_ALIVE}")
+    # set LWT to alive status
+    client.publish(MQTT_LWT_TOPIC, MQTT_LWT_MESSAGE_ALIVE, qos=1, retain=True)
 
 # callback for MQTT disconnection handling
 def on_disconnect(client, userdata, rc, properties, reason_code):
@@ -414,7 +427,7 @@ def main():
             print(json.dumps(car_data, indent=4))
             last_car_data = car_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(BASE_TOPIC +"/getConsumerCarsV2", car_data)
+            publish_json_as_mqtt(MQTT_BASE_TOPIC +"/getConsumerCarsV2", car_data)
 
         print("get_battery_data()")
         battery_data = get_battery_data(POLESTAR_VIN, access_token)
@@ -422,7 +435,7 @@ def main():
             print(json.dumps(battery_data, indent=4))
             last_battery_data = battery_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(BASE_TOPIC, battery_data)
+            publish_json_as_mqtt(MQTT_BASE_TOPIC, battery_data)
             if OPENWB_PUBLISH:
                 publish_soc_to_openwb(battery_data)
         
@@ -432,7 +445,7 @@ def main():
             print(json.dumps(odometer_data, indent=4))
             last_odometer_data = odometer_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(BASE_TOPIC, odometer_data)
+            publish_json_as_mqtt(MQTT_BASE_TOPIC, odometer_data)
 
         # wait POLESTAR_CYCLE seconds, but don't block
         print( "********************************************************************************")
