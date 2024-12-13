@@ -60,6 +60,7 @@ SLEEP_INTERVAL         = 0.1
 MQTT_LWT_TOPIC         = f"{MQTT_BASE_TOPIC}/container/online"
 MQTT_LWT_MESSAGE_DEAD  = "offline"
 MQTT_LWT_MESSAGE_ALIVE = "online"
+MQTT_TIMESTAMP_TOPIC   = f"{MQTT_BASE_TOPIC}/container/last_update"
 
 # API config
 POLESTAR_BASE_URL     = "https://pc-api.polestar.com/eu-north-1"
@@ -446,6 +447,10 @@ def main():
             last_odometer_data = odometer_data
             # send changed JSON as MQTT tree
             publish_json_as_mqtt(MQTT_BASE_TOPIC, odometer_data)
+
+        # timestamp for current cycle to MQTT
+        timestamp = datetime.now().astimezone(pytz.timezone(TZ)).strftime('%Y-%m-%d %H:%M:%S %Z%z')
+        client.publish(MQTT_TIMESTAMP_TOPIC, timestamp, qos=1, retain=True)
 
         # wait POLESTAR_CYCLE seconds, but don't block
         print( "********************************************************************************")
