@@ -57,7 +57,7 @@ OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
 
 # internal constants
 SLEEP_INTERVAL         = 0.1
-MQTT_LWT_TOPIC         = f"{MQTT_BASE_TOPIC}/container/online"
+MQTT_LWT_TOPIC         = f"{MQTT_BASE_TOPIC}/container/connected"
 MQTT_LWT_MESSAGE_DEAD  = "offline"
 MQTT_LWT_MESSAGE_ALIVE = "online"
 MQTT_TIMESTAMP_TOPIC   = f"{MQTT_BASE_TOPIC}/container/last_update"
