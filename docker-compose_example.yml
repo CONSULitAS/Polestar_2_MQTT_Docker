@@ -27,7 +27,7 @@ services:
       POLESTAR_EMAIL:    "xx@xxx"
       POLESTAR_PASSWORD: "XXX"
       POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx" # no spaces allowed
-      POLESTAR_CYCLE:    300 # seconds
+      POLESTAR_CYCLE:    270 # seconds
       MQTT_BROKER:       "192.168.1.100" # IP or DNS name
       MQTT_PORT:         "1883"
       MQTT_USER:         "" # has to be empty ("") if broker has no password

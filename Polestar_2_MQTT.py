@@ -35,7 +35,7 @@ TZ                      =     os.getenv('TZ',                "Europe/Berlin")
 POLESTAR_EMAIL          =     os.getenv('POLESTAR_EMAIL')
 POLESTAR_PASSWORD       =     os.getenv('POLESTAR_PASSWORD')
 POLESTAR_VIN            =     os.getenv('POLESTAR_VIN')
-POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE',    "300")) # seconds
+POLESTAR_CYCLE          = int(os.getenv('POLESTAR_CYCLE',    "270")) # seconds
 
 # MQTT broker
 MQTT_BROKER             =     os.getenv("MQTT_BROKER",       "localhost") # IP or DNS name
@@ -250,10 +250,10 @@ def get_api_token(tokenRequestCode, code_verifier):
     refresh_token = api_creds['refresh_token']
     expires_in    = api_creds['expires_in']
     expiry_time   = datetime.now() + timedelta(seconds=expires_in)
-    print("  access_token  = " + str(access_token)[0:39] + "...")
-    print("  refresh_token = {refresh_token}")
-    print("  expires_in    = {expires_in}")
-    print("  expiry_time   = " + get_local_time(TZ, expiry_time))
+    print( "  access_token  = " + str(access_token)[0:39] + "...")
+    print(f"  refresh_token = {refresh_token}")
+    print(f"  expires_in    = {expires_in}")
+    print( "  expiry_time   = " + get_local_time(TZ, expiry_time))
     
     return access_token, expiry_time, refresh_token
 
@@ -266,6 +266,81 @@ def get_token(email, password):
     print(" get_api_token()")
     access_token, expiry_time, refresh_token = get_api_token(auth_code, code_verifier)  # code_verifier is needed to get token
 
+    return access_token, expiry_time, refresh_token
+
+# refresh the access token using the refresh token
+def refresh_access_token(refresh_token):
+    """
+    Use the refresh token to obtain a new access token.
+    This avoids the need for a complete re-login process.
+
+    Args:
+        refresh_token (str): The refresh token obtained from the initial login.
+
+    Returns:
+        tuple: A tuple containing the new access token, expiry time, and new refresh token.
+    """
+    url = f"{POLESTAR_ID_URI}/token.oauth2"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    payload = {
+        "grant_type": "refresh_token",   # OAuth2 grant type for token refresh
+        "refresh_token": refresh_token,  # use the current refresh token
+        "client_id": CLIENT_ID           # client identifier for Polestar API
+    }
+    
+    # send POST request to refresh the access token
+    response = requests.post(url, headers=headers, data=payload)
+    
+    if response.status_code != 200 or "errors" in response.json():
+        wait_and_die(f"  response.status_code = {response.status_code}\n"
+                     + json.dumps(response.json(), indent=2),
+                     "refresh_access_token(): No new access token received")
+    
+    api_creds     = response.json()
+    access_token  = api_creds['access_token']   # new access token
+    refresh_token = api_creds['refresh_token']  # new refresh token (may change)
+    expires_in    = api_creds['expires_in']     # validity of the token in seconds
+    expiry_time   = datetime.now() + timedelta(seconds=expires_in)  # calculate expiry time
+    
+    print( "  access_token  = " + str(access_token)[:39] + "...")
+    print(f"  refresh_token = {refresh_token}")
+    print(f"  expires_in    = {expires_in} seconds")
+    print( "  expiry_time   = " + get_local_time(TZ, expiry_time))
+    
+    return access_token, expiry_time, refresh_token
+
+def ensure_valid_token(access_token, expiry_time, refresh_token, email, password):
+    """
+    Ensure the access token is valid. 
+    If the token is expired or close to expiry, it will be refreshed using the refresh token.
+    If no refresh token is available or the refresh fails, a full login is performed.
+
+    Args:
+        access_token (str): Current access token.
+        expiry_time (datetime): Expiration time of the current token.
+        refresh_token (str): Current refresh token.
+        email (str): User email to perform a full login if the refresh token is invalid.
+        password (str): User password to perform a full login if the refresh token is invalid.
+
+    Returns:
+        tuple: Returns the updated access token, expiry time, and refresh token.
+    """
+    # Check if the token will expire in the next 60 seconds or if no expiry time is set
+    if expiry_time is None or (datetime.now() >= expiry_time - timedelta(seconds=15)):
+        if refresh_token:
+            print(" refresh_access_token()")
+            try:
+                # Attempt to refresh the token
+                access_token, expiry_time, refresh_token = refresh_access_token(refresh_token)
+            except Exception as e:
+                print("get_token(), refresh_access_token() failed")
+                # If the refresh fails, fall back to the full login process
+                access_token, expiry_time, refresh_token = get_token(email, password)
+        else:
+            print("get_token(), no refresh token available")
+            access_token, expiry_time, refresh_token = get_token(email, password)
     return access_token, expiry_time, refresh_token
 
 #####################################
@@ -409,17 +484,22 @@ def publish_soc_to_openwb(battery_data):
         print(f' publish SoC {soc} to OpenWB {OPENWB_TOPIC}')
         client_openwb.publish(OPENWB_TOPIC, soc, qos=1, retain=True)
 
+#####################################
+# MAIN
+
 # main program: init and loop forever
 def main():
     print("Polestar_2_MQTT.py startet")
     print("==========================")
 
-    expiry_time        = None
-    last_car_data      = None
-    last_battery_data  = None
-    last_odometer_data = None
+    access_token       = None  # current access token
+    refresh_token      = None  # current refresh token
+    expiry_time        = None  # expiry time of the current access token
+    last_car_data      = None  # cache of the last car data to detect changes
+    last_battery_data  = None  # cache of the last battery data to detect changes
+    last_odometer_data = None  # cache of the last odometer data to detect changes
 
-    # init sinal handler to catch SIGTERM
+    # catch SIGTERM to ensure graceful shutdown
     signal.signal(signal.SIGTERM, signal_handler)
 
     # start MQTT clients
@@ -428,11 +508,15 @@ def main():
         connect_mqtt_openwb()
 
     while True:
-        # get new token
-        if expiry_time == None or datetime.now() >= expiry_time:
-            # TODO WORKAROUND: neu einloggen, statt refresh_token nutzen
-            print("get_token()")
-            access_token, expiry_time, refresh_token = get_token(POLESTAR_EMAIL, POLESTAR_PASSWORD)
+        # Ensure we have a valid access token (handle expiration, refresh, and full login)
+        print("ensure_valid_token()")
+        access_token, expiry_time, refresh_token = ensure_valid_token(
+            access_token, 
+            expiry_time, 
+            refresh_token, 
+            POLESTAR_EMAIL, 
+            POLESTAR_PASSWORD
+        )
 
         print("get_car_data()")
         car_data = get_car_data(POLESTAR_VIN, access_token)
