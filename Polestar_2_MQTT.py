@@ -7,7 +7,6 @@
 # 
 
 # TODO: PKCE challenge
-# TODO: token refresh
 # TODO: openWB URL
 # TODO: better error handling
 # TODO: report online/offline state on MQTT
@@ -23,6 +22,8 @@ import pytz
 import json
 import paho.mqtt.client as mqtt
 import urllib.parse
+import base64
+import hashlib
 
 #####################################
 # read ENVIRONMENT variables
@@ -68,8 +69,6 @@ POLESTAR_API_URL_V2   = f"{POLESTAR_BASE_URL}/mystar-v2"
 POLESTAR_REDIRECT_URI = "https://www.polestar.com/sign-in-callback"
 POLESTAR_ID_URI       = "https://polestarid.eu.polestar.com/as"
 CLIENT_ID             = "l3oopkc_10"
-CODE_VERIFIER         = "polestar-ios-widgets-are-enabled-by-scriptable" # TODO: real challenge
-CODE_CHALLENGE        = "adYJTSAVqq6CWBJn7yNdGKwcsmJb8eBewG8WpxnUzaE"
 
 # setup MQTT-Client
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -91,14 +90,14 @@ if (OPENWB_PUBLISH):
 
 # callback for MQTT connection handling
 def on_connect(client, userdata, flags, rc, properties):
-    print(f"MQTT connected with result code '{rc}': {MQTT_LWT_TOPIC}={MQTT_LWT_MESSAGE_ALIVE}")
+    print(f"    MQTT connected with result code '{rc}': {MQTT_LWT_TOPIC}={MQTT_LWT_MESSAGE_ALIVE}")
     # set LWT to alive status
     client.publish(MQTT_LWT_TOPIC, MQTT_LWT_MESSAGE_ALIVE, qos=1, retain=True)
 
 # callback for MQTT disconnection handling
 def on_disconnect(client, userdata, rc, properties, reason_code):
     if rc != 0:
-        print("MQTT disconnected unexpected with reason code '{reason_code}'.")
+        print("    MQTT disconnected unexpected with reason code '{reason_code}'.")
         # try to reconnect
         client.reconnect()
 
@@ -138,8 +137,22 @@ def wait_and_die(message, exception):
 #####################################
 # login to Polestar API
 
-# get login token and cookies (polestar-xxx-widget.js: getLoginFlowTokens())
+# generate Code Verifiers and Code Challenge for PKCE
+def generate_code_verifier_and_challenge():
+    # use random value
+    code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode('utf-8')
+    
+    # Code Challenge is SHA256 hash of Code Verifier
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).rstrip(b'=').decode('utf-8')
+    
+    return code_verifier, code_challenge
+
+# get login_token, cookies and generate code_verifier, code_challenge
+# (polestar-xxx-widget.js: getLoginFlowTokens())
 def get_path_token():
+    # new Code Verifier on every login
+    code_verifier, code_challenge = generate_code_verifier_and_challenge()
+
     # dictionary with parameters encoded in URL
     params = urllib.parse.urlencode({
         "response_type":         "code",
@@ -147,7 +160,7 @@ def get_path_token():
         "redirect_uri":          POLESTAR_REDIRECT_URI,
         "scope":                 "openid profile email customer:attributes",
         "state":                 "ea5aa2860f894a9287a4819dd5ada85c",
-        "code_challenge":        CODE_CHALLENGE,
+        "code_challenge":        code_challenge,
         "code_challenge_method": "S256",
     })
     url = f"{POLESTAR_ID_URI}/authorization.oauth2?{params}"
@@ -160,11 +173,13 @@ def get_path_token():
     cookies    = response.headers.get('Set-Cookie')
     cookie     = cookies.split(';')[0]
     path_token = response.headers.get('Location').split("resumePath=")[1].split("&")[0]
-    print(f"  cookies    = {cookies}")
-    print(f"  cookie     = {cookie}")
-    print(f"  path_token = {path_token}")
+    print(f"  code_verifier  = {code_verifier}")
+    print(f"  code_challenge = {code_challenge}")
+    print(f"  cookies        = {cookies}")
+    print(f"  cookie         = {cookie}")
+    print(f"  path_token     = {path_token}")
     
-    return path_token, cookie
+    return path_token, cookie, code_verifier  # return code_verifier also
 
 # login with token and credentials to get the code
 def perform_login(email, password, path_token, cookie):
@@ -210,16 +225,16 @@ def perform_login(email, password, path_token, cookie):
     return code
 
 # get API tokens
-def get_api_token(tokenRequestCode):
+def get_api_token(tokenRequestCode, code_verifier):
     url = f"{POLESTAR_ID_URI}/token.oauth2"
     headers = {
         "Content-Type": "application/x-www-form-urlencoded"
     }
-    # dictionary for URL encoded data (requests will to the encoding)
+    # dictionary for URL encoded data (requests will do the encoding)
     payload = {
         "grant_type":    "authorization_code",
         "code":          tokenRequestCode,
-        "code_verifier": CODE_VERIFIER,
+        "code_verifier": code_verifier,  # use code_verifier from parameters
         "client_id":     CLIENT_ID,
         "redirect_uri":  POLESTAR_REDIRECT_URI
     }
@@ -245,16 +260,13 @@ def get_api_token(tokenRequestCode):
 # login step by step
 def get_token(email, password):
     print(" get_path_token()")
-    path_token, cookie = get_path_token()
+    path_token, cookie, code_verifier = get_path_token()  # code_verifier will be generated on each login
     print(" perform_login()")
     auth_code = perform_login(email, password, path_token, cookie)
     print(" get_api_token()")
-    access_token, expiry_time, refresh_token = get_api_token(auth_code)
+    access_token, expiry_time, refresh_token = get_api_token(auth_code, code_verifier)  # code_verifier is needed to get token
 
     return access_token, expiry_time, refresh_token
-
-# unbekannter API-Endpoint
-#        "query": "\n  query getCarSpecifications($locale: SiteLocale) {\n    loggedinCarSpecification(locale: $locale) {\n      title {\n        key\n        value\n      }\n      specificationGroups {\n        groupId\n        label {\n          key\n          value\n        }\n        rows {\n          specificationId\n          label {\n            key\n            value\n          }\n        }\n      }\n      chargeport {\n        value\n      }\n    }\n  }\n",
 
 #####################################
 # read data from Polestar API
