@@ -44,4 +44,10 @@ services:
       # automatic update using Watchtower (https://github.com/containrrr/watchtower) highly recommended
       - "com.centurylinklabs.watchtower.enable=true"
 
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"  # maximum log size 1 MiB
+        max-file: "3"   # keep only 3 logfiles
+
 # ***** EOF *****
