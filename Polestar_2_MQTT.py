@@ -6,10 +6,12 @@
 # (c) @CONSULitAS 2024
 # 
 
-# TODO: PKCE challenge
+# TODO: reconnect to MQTT is not stable
 # TODO: openWB URL
 # TODO: better error handling
-# TODO: report online/offline state on MQTT
+# TODO: report online/offline state on MQTT (DONE)
+#       report API errors to MQTT instead of throwing errors with MAX_RETRIES
+# TODO: fix OPENWB_TOPIC to make it configurable in docker-compose.yml
 
 import traceback
 import os
@@ -252,7 +254,7 @@ def get_api_token(tokenRequestCode, code_verifier):
     expiry_time   = datetime.now() + timedelta(seconds=expires_in)
     print( "  access_token  = " + str(access_token)[0:39] + "...")
     print(f"  refresh_token = {refresh_token}")
-    print(f"  expires_in    = {expires_in}")
+    print(f"  expires_in    = {expires_in} (seconds)")
     print( "  expiry_time   = " + get_local_time(TZ, expiry_time))
     
     return access_token, expiry_time, refresh_token
@@ -383,7 +385,8 @@ def get_car_data(vin, access_token):
     response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code != 200:
-        wait_and_die("  response.status_code = {response.status_code}\n" + response,
+        wait_and_die("  response.status_code = {response.status_code}\n"
+                     + json.dumps(response.json(), indent=2),
                      "get_car_data() no data received")
     car_data = response.json()['data']
     
@@ -427,7 +430,8 @@ def get_battery_data(vin, access_token):
     response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code != 200:
-        wait_and_die("  response.status_code = {response.status_code}\n" + response,
+        wait_and_die("  response.status_code = {response.status_code}\n"
+                     + json.dumps(response.json(), indent=2),
                      "get_battery_data() no data received")
     
     battery_data = response.json()['data']
@@ -460,7 +464,8 @@ def get_odometer_data(vin, access_token):
     response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code != 200:
-        wait_and_die("  response.status_code = {response.status_code}\n" + response,
+        wait_and_die("  response.status_code = {response.status_code}\n"
+                     + json.dumps(response.json(), indent=2),
                      "get_odometer_data() no data received")
     
     odometer_data = response.json()['data']
