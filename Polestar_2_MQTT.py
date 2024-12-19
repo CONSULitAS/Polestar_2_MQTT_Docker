@@ -90,33 +90,64 @@ if (OPENWB_PUBLISH):
 #####################################
 # MQTT helper functions
 
+# Backoff strategy to handle connection and reconnection attempts
+def mqtt_backoff_attempt(client, method, max_retries=20, initial_delay=1, delay_max=300):
+    """ 
+    Implements an exponential backoff strategy for connecting or reconnecting to the MQTT broker.
+    
+    Parameters:
+    client -- The MQTT client object
+    method -- The method to call (e.g., client.connect or client.reconnect)
+    max_retries -- Maximum number of attempts (default: 20)
+    initial_delay -- Initial delay before retrying (default: 1 second)
+    delay_max -- Maximum delay in seconds (default: 300 seconds)
+    """
+    client_address = "Unknown"
+    delay = initial_delay  # Initial delay in seconds
+    start_time = time.time()  # Record the start time of the connection/reconnection attempts
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"    MQTT ({client_address}): attempt {attempt} to {'connect' if method == client.connect else 'reconnect'}... (waiting {delay} seconds)")
+            time.sleep(delay)  # Wait before trying to connect or reconnect
+            method()  # Call the connect or reconnect method
+            elapsed_time = time.time() - start_time  # Calculate elapsed time
+            print(f"    MQTT ({client_address}): {'Connected' if method == client.connect else 'Reconnected'} successfully after {elapsed_time:.2f} seconds!")
+            break  # If connection or reconnection is successful, exit the loop
+        except Exception as e:
+            print(f"    MQTT ({client_address}): attempt {attempt} failed: {e}")
+            delay = min(delay * 2, delay_max)  # Double the delay but do not exceed delay_max
+    else:
+        elapsed_time = time.time() - start_time  # Calculate elapsed time
+        wait_and_die(f"    MQTT ({client_address}): Could not {'connect' if method == client.connect else 'reconnect'} after {max_retries} attempts. Exiting.",
+                     f"    MQTT ({client_address}): broker down for {elapsed_time:.0f} seconds!")
+
 # callback for MQTT connection handling
-def on_connect(client, userdata, flags, rc, properties):
+def mqtt_on_connect(client, userdata, flags, rc, properties):
     print(f"    MQTT connected with result code '{rc}': {MQTT_LWT_TOPIC}={MQTT_LWT_MESSAGE_ALIVE}")
     # set LWT to alive status
     client.publish(MQTT_LWT_TOPIC, MQTT_LWT_MESSAGE_ALIVE, qos=1, retain=True)
 
 # callback for MQTT disconnection handling
-def on_disconnect(client, userdata, rc, properties, reason_code):
-    if rc != 0:
-        print("    MQTT disconnected unexpected with reason code '{reason_code}'.")
-        # try to reconnect
-        client.reconnect()
+def mqtt_on_disconnect(client, userdata, rc, properties=None, reason_code=None):
+    if rc != 0:  # rc = 0 indicates a normal disconnection
+        print(f"    MQTT: disconnected unexpectedly with reason code '{reason_code}'.")
+        mqtt_backoff_attempt(client, client.reconnect)
 
 # connect to MQTT broker
-def connect_mqtt():   
+def mqtt_connect():   
     # MQTT_USER and MQTT_PASSWORD have to be empty if no login to broker configured
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)   
-    client.on_connect     = on_connect
-    client.on_disconnect  = on_disconnect
-    client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
+    client.on_connect     = mqtt_on_connect
+    client.on_disconnect  = mqtt_on_disconnect
+    mqtt_backoff_attempt(client, lambda: client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL))
     client.loop_start()
 
 # connect to OpenWB built in MQTT broker
-def connect_mqtt_openwb():   
-    client_openwb.on_connect    = on_connect
-    client_openwb.on_disconnect = on_disconnect
-    client_openwb.connect(OPENWB_HOST, OPENWB_PORT, MQTT_KEEPALIVE_INTERVAL)
+def mqtt_connect_openwb():   
+    client_openwb.on_connect    = mqtt_on_connect
+    client_openwb.on_disconnect = mqtt_on_disconnect
+    mqtt_backoff_attempt(client_openwb, lambda: client_openwb.connect(OPENWB_HOST, OPENWB_PORT, MQTT_KEEPALIVE_INTERVAL))
     client_openwb.loop_start()
 
 #####################################
@@ -508,9 +539,9 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     # start MQTT clients
-    connect_mqtt()
+    mqtt_connect()
     if (OPENWB_PUBLISH):
-        connect_mqtt_openwb()
+        mqtt_connect_openwb()
 
     while True:
         # Ensure we have a valid access token (handle expiration, refresh, and full login)
