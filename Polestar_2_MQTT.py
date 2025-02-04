@@ -539,8 +539,7 @@ def main():
             print(json.dumps(car_telemetry_data, indent=4))
             last_car_telemetry_data = car_telemetry_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(BASE_TOPIC, car_telemetry_data['battery'])
-            publish_json_as_mqtt(BASE_TOPIC, car_telemetry_data['odometer'])
+            publish_json_as_mqtt(BASE_TOPIC +"/carTelematics", car_telemetry_data)
             if OPENWB_PUBLISH:
                 publish_soc_to_openwb(car_telemetry_data['battery'])
 
