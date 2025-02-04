@@ -431,7 +431,7 @@ def get_car_data(vin, access_token):
 
 # get battery & odometer data
 def get_car_telemetry_data(vin, access_token):
-    url = "https://pc-api.polestar.com/eu-north-1/mystar-v2"
+    url = POLESTAR_API_URL_V2
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
