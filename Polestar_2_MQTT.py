@@ -471,8 +471,9 @@ def get_car_telemetry_data(vin, access_token):
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
-        print("  response.status_code = " + str(response.status_code))
-        raise Exception("get_car_telemetry_data() Datenabfrage fehlgeschlagen")
+        wait_and_die("  response.status_code = {response.status_code}\n"
+                     + json.dumps(response.json(), indent=2),
+                     "get_car_telemetry_data() no data received")
     return response.json()['data']['carTelematics']
 
 # recursive parsing of the JSON object to build corresponding MQTT topics and send
@@ -500,10 +501,10 @@ def main():
     print("Polestar_2_MQTT.py startet")
     print("==========================")
 
-    access_token       = None  # current access token
-    refresh_token      = None  # current refresh token
-    expiry_time        = None  # expiry time of the current access token
-    last_car_data      = None  # cache of the last car data to detect changes
+    access_token              = None  # current access token
+    refresh_token             = None  # current refresh token
+    expiry_time               = None  # expiry time of the current access token
+    last_car_data             = None  # cache of the last car data to detect changes
     last_car_telemetry_data   = None  # cache of the last battery & odometer data to detect changes
 
     # catch SIGTERM to ensure graceful shutdown
