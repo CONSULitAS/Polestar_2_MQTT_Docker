@@ -429,79 +429,51 @@ def get_car_data(vin, access_token):
 
     return filtered_car_data
 
-# get battery data
-def get_battery_data(vin, access_token):
-    url = POLESTAR_API_URL_V2
+# get battery & odometer data
+def get_car_telemetry_data(vin, access_token):
+    url = "https://pc-api.polestar.com/eu-north-1/mystar-v2"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
     }
-    # source for GQL string: https://github.com/evcc-io/evcc/blob/master/vehicle/polestar/query.gql
     payload = {
-        "query": "query GetBatteryData($vin:String!) {"
-                    "getBatteryData(vin:$vin) {"
-                        "averageEnergyConsumptionKwhPer100Km,"
-                        "batteryChargeLevelPercentage,"
-                        "chargerConnectionStatus,"
-                        "chargingCurrentAmps,"
-                        "chargingPowerWatts,"
-                        "chargingStatus,"
-                        "estimatedChargingTimeMinutesToTargetDistance,"
-                        "estimatedChargingTimeToFullMinutes,"
-                        "estimatedDistanceToEmptyKm,"
-                        "estimatedDistanceToEmptyMiles,"
-                        "eventUpdatedTimestamp {"
-                            "iso,"
-                            "unix"
+        "query": "query carTelematics($vin:String!) {"
+                    "carTelematics(vin:$vin) {"
+                        "battery {"
+                            "averageEnergyConsumptionKwhPer100Km,"
+                            "batteryChargeLevelPercentage,"
+                            "chargerConnectionStatus,"
+                            "chargingCurrentAmps,"
+                            "chargingPowerWatts,"
+                            "chargingStatus,"
+                            "estimatedChargingTimeMinutesToTargetDistance,"
+                            "estimatedChargingTimeToFullMinutes,"
+                            "estimatedDistanceToEmptyKm,"
+                            "estimatedDistanceToEmptyMiles,"
+                            "eventUpdatedTimestamp {"
+                                "iso,"
+                                "unix"
+                            "}"
+                        "}"
+                        "odometer {"
+                            "averageSpeedKmPerHour,"
+                            "odometerMeters,"
+                            "tripMeterAutomaticKm,"
+                            "tripMeterManualKm,"
+                            "eventUpdatedTimestamp {"
+                                "iso,"
+                                "unix"
+                            "}"
                         "}"
                     "}"
                 "}",
         "variables": {"vin": vin}
     }
     response = requests.post(url, headers=headers, json=payload)
-    
     if response.status_code != 200:
-        wait_and_die("  response.status_code = {response.status_code}\n"
-                     + json.dumps(response.json(), indent=2),
-                     "get_battery_data() no data received")
-    
-    battery_data = response.json()['data']
-    
-    return battery_data
-
-# get odometer data
-def get_odometer_data(vin, access_token):
-    url = POLESTAR_API_URL_V2
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {access_token}"
-    }
-    # source for GQL string: https://github.com/evcc-io/evcc/blob/master/vehicle/polestar/query.gql
-    payload = {
-        "query": "query GetOdometerData($vin:String!) {"
-                    "getOdometerData(vin:$vin) {"
-                        "averageSpeedKmPerHour,"
-                        "odometerMeters,"
-                        "tripMeterAutomaticKm,"
-                        "tripMeterManualKm,"
-                        "eventUpdatedTimestamp {"
-                            "iso,"
-                            "unix"
-                        "}"
-                    "}"
-                "}",
-        "variables": {"vin": vin}
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    
-    if response.status_code != 200:
-        wait_and_die("  response.status_code = {response.status_code}\n"
-                     + json.dumps(response.json(), indent=2),
-                     "get_odometer_data() no data received")
-    
-    odometer_data = response.json()['data']
-    
-    return odometer_data
+        print("  response.status_code = " + str(response.status_code))
+        raise Exception("get_car_telemetry_data() Datenabfrage fehlgeschlagen")
+    return response.json()['data']['carTelematics']
 
 # recursive parsing of the JSON object to build corresponding MQTT topics and send
 def publish_json_as_mqtt(topic, json_obj):
@@ -516,7 +488,7 @@ def publish_json_as_mqtt(topic, json_obj):
 # extract SoC from battery data JSON and send to openWB via MQTT
 def publish_soc_to_openwb(battery_data):
     if isinstance(battery_data, dict):
-        soc = battery_data['getBatteryData']['batteryChargeLevelPercentage']
+        soc = battery_data['batteryChargeLevelPercentage']
         print(f' publish SoC {soc} to OpenWB {OPENWB_TOPIC}')
         client_openwb.publish(OPENWB_TOPIC, soc, qos=1, retain=True)
 
@@ -532,8 +504,7 @@ def main():
     refresh_token      = None  # current refresh token
     expiry_time        = None  # expiry time of the current access token
     last_car_data      = None  # cache of the last car data to detect changes
-    last_battery_data  = None  # cache of the last battery data to detect changes
-    last_odometer_data = None  # cache of the last odometer data to detect changes
+    last_car_telemetry_data   = None  # cache of the last battery & odometer data to detect changes
 
     # catch SIGTERM to ensure graceful shutdown
     signal.signal(signal.SIGTERM, signal_handler)
@@ -562,23 +533,16 @@ def main():
             # send changed JSON as MQTT tree
             publish_json_as_mqtt(MQTT_BASE_TOPIC +"/getConsumerCarsV2", car_data)
 
-        print("get_battery_data()")
-        battery_data = get_battery_data(POLESTAR_VIN, access_token)
-        if battery_data != last_battery_data:
-            print(json.dumps(battery_data, indent=4))
-            last_battery_data = battery_data
+        print("get_car_telemetry_data()")
+        car_telemetry_data = get_car_telemetry_data(POLESTAR_VIN, access_token)
+        if car_telemetry_data != last_car_telemetry_data:
+            print(json.dumps(car_telemetry_data, indent=4))
+            last_car_telemetry_data = car_telemetry_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(MQTT_BASE_TOPIC, battery_data)
+            publish_json_as_mqtt(BASE_TOPIC, car_telemetry_data['battery'])
+            publish_json_as_mqtt(BASE_TOPIC, car_telemetry_data['odometer'])
             if OPENWB_PUBLISH:
-                publish_soc_to_openwb(battery_data)
-        
-        print("get_odometer_data()")
-        odometer_data = get_odometer_data(POLESTAR_VIN, access_token)
-        if odometer_data != last_odometer_data:
-            print(json.dumps(odometer_data, indent=4))
-            last_odometer_data = odometer_data
-            # send changed JSON as MQTT tree
-            publish_json_as_mqtt(MQTT_BASE_TOPIC, odometer_data)
+                publish_soc_to_openwb(car_telemetry_data['battery'])
 
         # timestamp for current cycle to MQTT
         timestamp = datetime.now().astimezone(pytz.timezone(TZ)).strftime('%Y-%m-%d %H:%M:%S %Z%z')
