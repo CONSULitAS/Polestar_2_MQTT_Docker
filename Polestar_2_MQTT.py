@@ -562,7 +562,7 @@ def main():
 # signal handler for SIGTERM
 def signal_handler(sig, frame):
     print("SIGTERM received: stop run")
-    server.shutdown()
+    #server.shutdown() # server is undefined - reason unclear
     client.disconnect()
     if (OPENWB_PUBLISH):
         client_openwb.disconnect()
