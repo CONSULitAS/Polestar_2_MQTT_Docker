@@ -21,8 +21,8 @@
         "id": "8f790b36afc8587a",
         "type": "mqtt in",
         "z": "770e88b6.2662e",
-        "name": "polestar2/getBatteryData/batteryChargeLevelPercentage",
-        "topic": "polestar2/getBatteryData/batteryChargeLevelPercentage",
+        "name": "polestar2/carTelematics/battery/batteryChargeLevelPercentage",
+        "topic": "polestar2/carTelematics/battery/batteryChargeLevelPercentage",
         "qos": "2",
         "datatype": "auto-detect",
         "broker": "c3558342.6fcda8",
@@ -30,7 +30,7 @@
         "rap": false,
         "rh": "0",
         "inputs": 0,
-        "x": 250,
+        "x": 270,
         "y": 80,
         "wires": [
             [
@@ -90,21 +90,63 @@
         "wires": [
             [
                 "7a8f315b6bed5f0f",
-                "0e841af36df8bb00"
+                "0e841af36df8bb00",
+                "3cab20076923534d"
             ]
         ]
+    },
+    {
+        "id": "3cab20076923534d",
+        "type": "ui_gauge",
+        "z": "770e88b6.2662e",
+        "name": "HV-Batterie",
+        "group": "22d0159797a512f8",
+        "order": 1,
+        "width": "4",
+        "height": "3",
+        "gtype": "wave",
+        "title": "HV-Batterie",
+        "label": "%",
+        "format": "{{value | number:1}}",
+        "min": 0,
+        "max": "100",
+        "colors": [
+            "#ff2600",
+            "#e6e600",
+            "#77bb40"
+        ],
+        "seg1": "15",
+        "seg2": "30",
+        "diff": false,
+        "className": "",
+        "x": 1050,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "faf5a6396aa32c91",
+        "type": "comment",
+        "z": "770e88b6.2662e",
+        "name": "openWB LP1 Endpunkte",
+        "info": "Per MQTT zu lesen:\nopenWB/lp/3/AConfigured Stromvorgabe in A\nPer MQTT zu schreiben:\nopenWB/set/lp/3/plugStat Status, ob ein Fahrzeug angesteckt ist, nur 0 (nein) oder 1 (ja)\nopenWB/set/lp/3/chargeStat Status, ob gerade geladen wird, nur 0 (nein) oder 1 (ja)\n\nPer MQTT zu schreiben:\nopenWB/set/lp/3/W Ladeleistung in Watt, int, positiv\nopenWB/set/lp/3/kWhCounter Zählerstand in kWh, float, Punkt als Trenner, nur positiv\nOptional zusätzlich:\nopenWB/set/lp/3/VPhase1 Spannung Phase 1, float, Punkt als Trenner, nur positiv\nopenWB/set/lp/3/VPhase2 Spannung Phase 2, float, Punkt als Trenner, nur positiv\nopenWB/set/lp/3/VPhase3 Spannung Phase 3, float, Punkt als Trenner, nur positiv\nopenWB/set/lp/3/APhase1 Strom Phase 1, float, Punkt als Trenner, nur positiv\nopenWB/set/lp/3/APhase2 Strom Phase 2, float, Punkt als Trenner, nur positiv\nopenWB/set/lp/3/APhase3 Strom Phase 3, float, Punkt als Trenner, nur positiv",
+        "x": 150,
+        "y": 40,
+        "wires": []
     },
     {
         "id": "f300b438.565808",
         "type": "mqtt-broker",
         "name": "openWB",
-        "broker": "openwb.fritz.box",
+        "broker": "gr-openwb.fritz.box",
         "port": "1883",
         "clientid": "node-red",
+        "autoConnect": true,
         "usetls": false,
         "compatmode": false,
+        "protocolVersion": 4,
         "keepalive": "60",
         "cleansession": true,
+        "autoUnsubscribe": true,
         "birthTopic": "",
         "birthQos": "0",
         "birthRetain": "false",
@@ -121,8 +163,8 @@
     {
         "id": "c3558342.6fcda8",
         "type": "mqtt-broker",
-        "name": "Mosquitto",
-        "broker": "mosquitto.fritz.box",
+        "name": "RaspFHEM MQTT",
+        "broker": "raspfhem",
         "port": "1883",
         "clientid": "Node-RED",
         "autoConnect": true,
@@ -144,5 +186,25 @@
         "willQos": "0",
         "willRetain": "false",
         "willPayload": ""
+    },
+    {
+        "id": "22d0159797a512f8",
+        "type": "ui_group",
+        "name": "Polestar 2",
+        "tab": "2eeaa49e.47ac9c",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "2eeaa49e.47ac9c",
+        "type": "ui_tab",
+        "name": "Home",
+        "icon": "dashboard",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
     }
 ]
