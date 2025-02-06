@@ -254,7 +254,12 @@ def perform_login(email, password, path_token, cookie):
         # TODO: try / except
         code    = response.headers['Location'].split("code=")[1].split("&")[0]
         print(f"   code = {code}")
-    
+
+    # no token received? problem with login
+    if code is None:
+        wait_and_die(f"  code = {code} and uid = {uid}",
+                     "perform_login(): login not successfull: check your credentials at https://www.polestar.com/de/login/profile/")
+
     return code
 
 # get API tokens
