@@ -221,7 +221,9 @@ def perform_login(email, password, path_token, cookie):
         "Content-Type": "application/x-www-form-urlencoded",
         "Cookie": cookie
     }
-    data = f"pf.username={email}&pf.pass={password}"
+    # Username and Password have to be URL encoded to avoid problems with special characters
+    data = f"pf.username={urllib.parse.quote(email, safe='')}&pf.pass={urllib.parse.quote(password, safe='')}"
+    
     response = requests.post(url, headers=headers, data=data, allow_redirects=False)
     
     if response.status_code not in [302, 303]:
