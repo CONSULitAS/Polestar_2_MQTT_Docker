@@ -45,8 +45,7 @@ MQTT_PORT               = int(os.getenv("MQTT_PORT",         1883))
 MQTT_KEEPALIVE_INTERVAL = int(os.getenv("MQTT_KEEPALIVE",    60))
 MQTT_USER               =     os.getenv("MQTT_USER",         "")
 MQTT_PASSWORD           =     os.getenv("MQTT_PASSWORD",     "")
-BASE_TOPIC              =     os.getenv("BASE_TOPIC",     "polestar2")
-MQTT_BASE_TOPIC         =     BASE_TOPIC # TODO TMP: for backward compatibility
+MQTT_BASE_TOPIC         =     os.getenv("MQTT_BASE_TOPIC",   "polestar2")
 
 # openWB - optional
 OPENWB_PUBLISH          =     os.getenv("OPENWB_PUBLISH", False) # default: no openWB 
@@ -547,7 +546,7 @@ def main():
             print(json.dumps(car_telemetry_data, indent=4))
             last_car_telemetry_data = car_telemetry_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(BASE_TOPIC +"/carTelematics", car_telemetry_data)
+            publish_json_as_mqtt(MQTT_BASE_TOPIC +"/carTelematics", car_telemetry_data)
             if OPENWB_PUBLISH:
                 publish_soc_to_openwb(car_telemetry_data['battery'])
 
