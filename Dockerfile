@@ -11,12 +11,12 @@ WORKDIR /app
 ENV PATH="/app/venv/bin:$PATH"
 
 # Kopieren des Python-Skripts und der Requirements nach WORKDIR
-COPY Polestar_2_MQTT.py requirements.txt ./
+COPY src ./
 
 # Python Virtualenv einrichten
 # Basissystem aktualisieren
 # pip upgraden
-# Installieren der erforderlichen Python-Pakete
+# installieren der erforderlichen Python-Pakete
 RUN <<EOF
     python -m venv venv
     apt update -qq -y && apt upgrade -qq -y
