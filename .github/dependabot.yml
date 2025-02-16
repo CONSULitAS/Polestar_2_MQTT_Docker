@@ -12,5 +12,11 @@ updates:
     # Check for updates once a week
     schedule:
       interval: "weekly"
+  # Maintain poetry
+  - package-ecosystem: "pip"
+    directory: "/"
+    # Check for updates once a week
+    schedule:
+      interval: "weekly"
 
 # ***** EOF *****

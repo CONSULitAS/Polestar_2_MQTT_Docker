@@ -1,0 +1,29 @@
+[project]
+name = "polestar2MqttDocker"
+version = "0.1.0"
+description = "Docker Container with gateway between Polestar API and MQTT"
+authors = [
+    {name = "Jochen Groppe",email = "jochen.groppe@consulitas.de"}
+]
+license = {text = "GNU General Public License v3.0"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests (>=2.32.3,<3.0.0)",
+    "pytz (>=2025.1,<2026.0)",
+    "paho-mqtt (>=2.1.0,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.9.6"
+black = "^25.1.0"
+mypy = "^1.15.0"
+flake8 = "^7.1.1"
+types-requests = "^2.32.0.20241016"
+types-pytz = "^2025.1.0.20250204"
+

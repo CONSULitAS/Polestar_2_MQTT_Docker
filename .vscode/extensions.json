@@ -1,0 +1,15 @@
+{
+    "recommendations": [
+      "charliermarsh.ruff",
+      "EditorConfig.EditorConfig",
+      "esbenp.prettier-vscode",
+      "foxundermoon.shell-format",
+      "ms-python.black-formatter",
+      "ms-python.flake8",
+      "ms-python.isort",
+      "ms-python.python",
+      "streetsidesoftware.code-spell-checker-german",
+      "streetsidesoftware.code-spell-checker",
+    ],
+    "unwantedRecommendations": []
+  }

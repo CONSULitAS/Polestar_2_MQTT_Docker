@@ -1,7 +1,0 @@
-# requirements.txt für Polestar_2_MQTT.py
-
-requests
-pytz
-paho-mqtt
-
-# ***** EOF *****
