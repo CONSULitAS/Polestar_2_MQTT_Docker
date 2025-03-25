@@ -198,13 +198,14 @@ def get_path_token():
     url = f"{POLESTAR_ID_URI}/authorization.oauth2?{params}"
     response = requests.get(url, allow_redirects=False)
     
-    if response.status_code not in [302, 303]: # = 'see other'
+    if response.status_code not in [302, 303, 200]: # = 'see other'
         wait_and_die(f"  response.status_code = {response.status_code}",
                      "get_login_tokens(): login token not successfuly received")
     
     cookies    = response.headers.get('Set-Cookie')
     cookie     = cookies.split(';')[0]
-    path_token = response.headers.get('Location').split("resumePath=")[1].split("&")[0]
+    body=response.text
+    path_token=body.split("url:")[1].split("/")[2]
     print(f"  code_verifier  = {code_verifier}")
     print(f"  code_challenge = {code_challenge}")
     print(f"  cookies        = {cookies}")
