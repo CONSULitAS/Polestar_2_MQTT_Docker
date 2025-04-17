@@ -205,7 +205,7 @@ def get_path_token():
     cookies    = response.headers.get('Set-Cookie')
     cookie     = cookies.split(';')[0]
     body=response.text
-    path_token=body.split("url:")[1].split("/")[2]
+    path_token=body.split("action:")[1].split("/")[2]
     print(f"  code_verifier  = {code_verifier}")
     print(f"  code_challenge = {code_challenge}")
     print(f"  cookies        = {cookies}")
