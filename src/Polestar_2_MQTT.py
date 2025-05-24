@@ -61,6 +61,7 @@ OPENWB_LP_NUM           = int(os.getenv("OPENWB_LP_NUM",  1)) # can be 1 to 8
 SLEEP_INTERVAL         = 0.1
 MQTT_LWT_TOPIC         = f"{MQTT_BASE_TOPIC}/container/connected"
 MQTT_LWT_MESSAGE_DEAD  = "offline"
+MQTT_LWT_MESSAGE_ERROR = "error"
 MQTT_LWT_MESSAGE_ALIVE = "online"
 MQTT_TIMESTAMP_TOPIC   = f"{MQTT_BASE_TOPIC}/container/last_update"
 
@@ -161,6 +162,7 @@ def get_local_time(tz, time):
 
 def wait_and_die(message, exception):
     print(message)
+    client.publish(MQTT_LWT_TOPIC, MQTT_LWT_MESSAGE_ERROR, qos=1, retain=True)
     time.sleep(POLESTAR_CYCLE)  # wait POLESTAR_CYCLE seconds to reduce retry count
     raise Exception(exception)
     
@@ -423,7 +425,7 @@ def get_car_data(vin, access_token):
     response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code != 200:
-        wait_and_die("  response.status_code = {response.status_code}\n"
+        wait_and_die(f"  response.status_code = {response.status_code}\n"
                      + json.dumps(response.json(), indent=2),
                      "get_car_data() no data received")
     car_data = response.json()['data']
@@ -444,53 +446,66 @@ def get_car_telemetry_data(vin, access_token):
         "Authorization": f"Bearer {access_token}"
     }
     payload = {
-        "query": "query carTelematics($vin:String!) {"
-                    "carTelematics(vin:$vin) {"
-                        "battery {"
-                            "averageEnergyConsumptionKwhPer100Km,"
-                            "batteryChargeLevelPercentage,"
-                            "chargerConnectionStatus,"
-                            "chargingCurrentAmps,"
-                            "chargingPowerWatts,"
-                            "chargingStatus,"
-                            "estimatedChargingTimeMinutesToTargetDistance,"
-                            "estimatedChargingTimeToFullMinutes,"
-                            "estimatedDistanceToEmptyKm,"
-                            "estimatedDistanceToEmptyMiles,"
-                            "eventUpdatedTimestamp {"
-                                "iso,"
-                                "unix"
-                            "}"
-                        "}"
-                        "odometer {"
-                            "averageSpeedKmPerHour,"
-                            "odometerMeters,"
-                            "tripMeterAutomaticKm,"
-                            "tripMeterManualKm,"
-                            "eventUpdatedTimestamp {"
-                                "iso,"
-                                "unix"
-                            "}"
-                        "}"
-                    "}"
-                "}",
-        "variables": {"vin": vin}
+        "query": """
+        query CarTelematicsV2($vins: [String!]!) {
+            carTelematicsV2(vins: $vins) {
+                health {
+                    vin
+                    brakeFluidLevelWarning
+                    daysToService
+                    distanceToServiceKm
+                    engineCoolantLevelWarning
+                    oilLevelWarning
+                    serviceWarning
+                    timestamp { seconds nanos }
+                }
+                battery {
+                    vin
+                    batteryChargeLevelPercentage
+                    chargingStatus
+                    estimatedChargingTimeToFullMinutes
+                    estimatedDistanceToEmptyKm
+                    timestamp { seconds nanos }
+                }
+                odometer {
+                    vin
+                    odometerMeters
+                    timestamp { seconds nanos }
+                }
+            }
+        }
+        """,
+         "variables": {"vins": vin}
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
+        print(response.json())
         wait_and_die("  response.status_code = {response.status_code}\n"
                      + json.dumps(response.json(), indent=2),
                      "get_car_telemetry_data() no data received")
-    return response.json()['data']['carTelematics']
+    return response.json()['data']['carTelematicsV2']
 
 # recursive parsing of the JSON object to build corresponding MQTT topics and send
 def publish_json_as_mqtt(topic, json_obj):
     if isinstance(json_obj, dict):
+         # dict → rekursiv
         for key, value in json_obj.items():
             sub_topic = f"{topic}/{key}"
             publish_json_as_mqtt(sub_topic, value) # call self to resolve next json level
+
+    elif isinstance(json_obj, list):
+         # list → Index im Topic
+        for idx, item in enumerate(json_obj):
+             sub_topic = f"{topic}/{idx}"
+             publish_json_as_mqtt(sub_topic, item)
+
     else:
-        json_payload = json.dumps(json_obj)
+        if isinstance(json_obj, str):
+            json_payload = json_obj
+        else:
+            json_payload = json.dumps(json_obj) # json.dumps für korrekte String-Repräsentation
+
+        print(f"{topic}: {json_payload}")
         client.publish(topic, json_payload, qos=1, retain=True)
 
 # extract SoC from battery data JSON and send to openWB via MQTT
@@ -547,7 +562,7 @@ def main():
             print(json.dumps(car_telemetry_data, indent=4))
             last_car_telemetry_data = car_telemetry_data
             # send changed JSON as MQTT tree
-            publish_json_as_mqtt(MQTT_BASE_TOPIC +"/carTelematics", car_telemetry_data)
+            publish_json_as_mqtt(MQTT_BASE_TOPIC +"/CarTelematicsV2", car_telemetry_data)
             if OPENWB_PUBLISH:
                 publish_soc_to_openwb(car_telemetry_data['battery'])
 
