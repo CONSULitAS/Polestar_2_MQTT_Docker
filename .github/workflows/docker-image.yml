@@ -50,7 +50,7 @@ jobs:
 
       - name: Docker Image Update Checker
         id: baseupdatecheck
-        uses: lucacome/docker-image-update-checker@v2
+        uses: lucacome/docker-image-update-checker@v3
         with:
           base-image: ${{ env.BASE_IMAGE }}
           image: ${{ steps.string_lower_case.outputs.lowercase }}:latest
