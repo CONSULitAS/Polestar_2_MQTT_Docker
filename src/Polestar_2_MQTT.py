@@ -413,8 +413,6 @@ def get_car_data(vin, access_token):
                             "versionTimestamp"
                         "},"
                         "registrationNo,"
-                        "factoryCompleteDate,"
-                        "registrationDate,"
                         "deliveryDate,"
                         "currentPlannedDeliveryDate"
                     "}"
