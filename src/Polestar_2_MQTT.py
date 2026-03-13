@@ -27,6 +27,8 @@ import urllib.parse
 import base64
 import hashlib
 
+from graphql_queries import build_cartelematicsv2_payload, build_getconsumercarsv2_payload
+
 #####################################
 # read ENVIRONMENT variables
 
@@ -395,32 +397,7 @@ def get_car_data(vin, access_token):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
     }
-    # source for GQL string: https://github.com/evcc-io/evcc/blob/master/vehicle/polestar/query.gql
-    payload = {
-        "query": "query GetConsumerCarsV2 {"
-                    "getConsumerCarsV2 {"
-                        "vin,"
-                        "internalVehicleIdentifier,"
-                        "modelYear,"
-                        #"claims {"             # läuft, aber noch nicht besonders nützlich
-                        #    "validFromDate,"
-                        #    "validUntilDate,"
-                        #    "validUntilMileage"
-                        #"},"
-                        #"hasPerformancePackage,"
-                        #"software {"
-                        #    "version,"
-                        #    "versionTimestamp"
-                        #"},"
-                        #"registrationNo,"
-                        #"deliveryDate,"
-                        #"currentPlannedDeliveryDate"
-                    "}"
-                "}",
-        "operationName": "GetConsumerCarsV2",
-        "variables": "{}"
-    }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=build_getconsumercarsv2_payload())
     
     if response.status_code != 200:
         wait_and_die(f"  response.status_code = {response.status_code}\n"
@@ -443,39 +420,7 @@ def get_car_telemetry_data(vin, access_token):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
     }
-    payload = {
-        "query": """
-        query CarTelematicsV2($vins: [String!]!) {
-            carTelematicsV2(vins: $vins) {
-                health {
-                    vin
-                    brakeFluidLevelWarning
-                    daysToService
-                    distanceToServiceKm
-                    engineCoolantLevelWarning
-                    oilLevelWarning
-                    serviceWarning
-                    timestamp { seconds nanos }
-                }
-                battery {
-                    vin
-                    batteryChargeLevelPercentage
-                    chargingStatus
-                    estimatedChargingTimeToFullMinutes
-                    estimatedDistanceToEmptyKm
-                    timestamp { seconds nanos }
-                }
-                odometer {
-                    vin
-                    odometerMeters
-                    timestamp { seconds nanos }
-                }
-            }
-        }
-        """,
-         "variables": {"vins": vin}
-    }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=build_cartelematicsv2_payload(vin))
     if response.status_code != 200:
         print(response.json())
         wait_and_die("  response.status_code = {response.status_code}\n"
@@ -546,13 +491,13 @@ def main():
             POLESTAR_PASSWORD
         )
 
-        # print("get_car_data()")
-        # car_data = get_car_data(POLESTAR_VIN, access_token)
-        # if car_data != last_car_data:
-        #     print(json.dumps(car_data, indent=4))
-        #     last_car_data = car_data
-        #     # send changed JSON as MQTT tree
-        #     publish_json_as_mqtt(MQTT_BASE_TOPIC +"/getConsumerCarsV2", car_data)
+        print("get_car_data()")
+        car_data = get_car_data(POLESTAR_VIN, access_token)
+        if car_data != last_car_data:
+            print(json.dumps(car_data, indent=4))
+            last_car_data = car_data
+            # send changed JSON as MQTT tree
+            publish_json_as_mqtt(MQTT_BASE_TOPIC +"/getConsumerCarsV2", car_data)
 
         print("get_car_telemetry_data()")
         car_telemetry_data = get_car_telemetry_data(POLESTAR_VIN, access_token)
@@ -583,18 +528,19 @@ def signal_handler(sig, frame):
         client_openwb.disconnect()
     sys.exit(0)
 
-# catch all exeptions in main to get tracheback output
-try:
-    main()
-except Exception as e:
-    exc_type, exc_value, exc_traceback = sys.exc_info()
-    # extract last line of traceback fpr 
-    line_number = traceback.extract_tb(exc_traceback)[-1][1]
-    print(f"Error  : {str(e)}")
-    print(f"in line: {line_number}")
-    print(f"type   : {exc_type.__name__}")
-    print(f"message: {exc_value}")
-    print("************** Traceback ***************")
-    print(traceback.format_exc())
+if __name__ == "__main__":
+    # catch all exeptions in main to get tracheback output
+    try:
+        main()
+    except Exception as e:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        # extract last line of traceback fpr 
+        line_number = traceback.extract_tb(exc_traceback)[-1][1]
+        print(f"Error  : {str(e)}")
+        print(f"in line: {line_number}")
+        print(f"type   : {exc_type.__name__}")
+        print(f"message: {exc_value}")
+        print("************** Traceback ***************")
+        print(traceback.format_exc())
 
 # ***** EOF *****
