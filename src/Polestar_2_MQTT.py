@@ -398,16 +398,30 @@ def get_car_data(vin, access_token):
         "Authorization": f"Bearer {access_token}"
     }
     response = requests.post(url, headers=headers, json=build_getconsumercarsv2_payload())
-    
+
+    try:
+        response_json = response.json()
+    except ValueError:
+        response_json = {"raw_response": response.text}
+
     if response.status_code != 200:
         wait_and_die(f"  response.status_code = {response.status_code}\n"
-                     + json.dumps(response.json(), indent=2),
+                     + json.dumps(response_json, indent=2),
                      "get_car_data() no data received")
-    car_data = response.json()['data']
-    
-    # get the car with given VIN
-    filtered_car_data = next((car for car in car_data['getConsumerCarsV2'] if car['vin'] == vin), None)
-    
+
+    car_data = response_json.get('data') or {}
+    consumer_cars = car_data.get('getConsumerCarsV2')
+
+    if not isinstance(consumer_cars, list):
+        wait_and_die("get_car_data(): unexpected API response\n"
+                     + json.dumps(response_json, indent=2),
+                     "get_car_data(): getConsumerCarsV2 missing or invalid")
+
+    filtered_car_data = next(
+        (car for car in consumer_cars if isinstance(car, dict) and car.get('vin') == vin),
+        None
+    )
+
     if filtered_car_data is None:
         raise ValueError(f"get_car_data(): no data for car with VIN {vin}")
 

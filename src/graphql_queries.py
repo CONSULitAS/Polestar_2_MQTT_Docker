@@ -15,7 +15,7 @@ query GetConsumerCarsV2 {
         pno34
         hasPerformancePackage
         modelYear
-        commercialModelYears
+        # commercialModelYears
         computedModelYear
         structureWeek
         primaryDriver
