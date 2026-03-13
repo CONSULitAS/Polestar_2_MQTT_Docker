@@ -546,13 +546,13 @@ def main():
             POLESTAR_PASSWORD
         )
 
-        print("get_car_data()")
-        car_data = get_car_data(POLESTAR_VIN, access_token)
-        if car_data != last_car_data:
-            print(json.dumps(car_data, indent=4))
-            last_car_data = car_data
-            # send changed JSON as MQTT tree
-            publish_json_as_mqtt(MQTT_BASE_TOPIC +"/getConsumerCarsV2", car_data)
+        # print("get_car_data()")
+        # car_data = get_car_data(POLESTAR_VIN, access_token)
+        # if car_data != last_car_data:
+        #     print(json.dumps(car_data, indent=4))
+        #     last_car_data = car_data
+        #     # send changed JSON as MQTT tree
+        #     publish_json_as_mqtt(MQTT_BASE_TOPIC +"/getConsumerCarsV2", car_data)
 
         print("get_car_telemetry_data()")
         car_telemetry_data = get_car_telemetry_data(POLESTAR_VIN, access_token)
