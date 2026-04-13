@@ -113,7 +113,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_NAME }},${{ env.REGISTRY_GITHUB }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -147,7 +147,7 @@ jobs:
 
       # - name: Extract metadata (tags, labels) for Docker
       #   id: docker_meta
-      #   uses: docker/metadata-action@v5
+      #   uses: docker/metadata-action@v6
       #   with:
       #     images: ${{ env.REGISTRY_GITHUB }}/${{ env.IMAGE_NAME }}
       #     tags: |
