@@ -65,16 +65,33 @@ Notes:
 * this file is only needed for local non-container execution
 * adjust `OPENWB_*` values only if you want direct forwarding to OpenWB v1
 
+## GraphQL overrides
+
+The container now mounts `./local-files` to `/local-files`.
+
+If `/local-files/graphql_queries.py` exists inside the container, the app prefers that file over the built-in [src/graphql_queries.py](/home/hi345gr/Docker/Polestar_2_MQTT_Docker/src/graphql_queries.py). This lets you customize GraphQL queries without modifying the shipped source code.
+
+Included template:
+* [local-files/graphql_queries.py_sample](/home/hi345gr/Docker/Polestar_2_MQTT_Docker/local-files/graphql_queries.py_sample)
+
+Usage:
+1. copy `local-files/graphql_queries.py_sample` to `local-files/graphql_queries.py`
+2. adjust the queries or payload builders as needed
+3. restart the container
+
+Keep the function names `build_getconsumercarsv2_payload()` and `build_cartelematicsv2_payload(vin)` unchanged, because the main program imports exactly these names.
+
 ## Docker startup
 
 1. install Docker: https://docs.docker.com/engine/install/
 2. download `docker-compose_example.yml`
 3. rename it to `docker-compose.yml` (remove `_example`)
 4. create `.env` from `.env.example`
-5. edit the remaining values under `environment:` in `docker-compose.yml`
-6. start the container with `docker compose up` or `docker compose up -d`
+5. optionally create `local-files/graphql_queries.py` from `local-files/graphql_queries.py_sample`
+6. edit the remaining values under `environment:` in `docker-compose.yml`
+7. start the container with `docker compose up` or `docker compose up -d`
 
-No volumes or custom network are required.
+The compose setup mounts `./local-files` into the container automatically.
 
 ## Local startup
 

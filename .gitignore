@@ -161,3 +161,4 @@ cython_debug/
 #.idea/
 docker-compose.yml
 .DS_Store
+local-files/graphql_queries.py

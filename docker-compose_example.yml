@@ -12,7 +12,8 @@
 # - download and rename this file to 'docker-compose.yml' (remove '_example')
 # - create a '.env' file for your Polestar credentials and MQTT login if needed
 # - edit values under 'environment:' to match your needs
-# - no volumes or network needed
+# - optionally customize local-files/graphql_queries.py based on the sample file
+# - no additional network needed
 # - start container with 'docker compose up'
 
 #version: '3.8' (deprecated)
@@ -40,7 +41,8 @@ services:
       #OPENWB_PUBLISH:  True
       #OPENWB_PORT:     1883 # default 1883 if unset
       #OPENWB_LP_NUM:   1 # optional: defaults to 1, change for other LP
-
+    volumes:
+      - ./local-files:/local-files
     labels:
       # automatic update using Watchtower (https://github.com/containrrr/watchtower) highly recommended
       - "com.centurylinklabs.watchtower.enable=true"

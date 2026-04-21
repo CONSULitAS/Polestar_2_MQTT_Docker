@@ -1,0 +1,72 @@
+"""Copy this file to graphql_queries.py to override the built-in GraphQL payloads."""
+
+# The container prefers /local-files/graphql_queries.py when present.
+# Keep the public function names unchanged so Polestar_2_MQTT.py can import them.
+
+GET_CONSUMER_CARS_V2_QUERY = """
+query GetConsumerCarsV2 {
+    getConsumerCarsV2 {
+        vin
+        internalVehicleIdentifier
+        registrationNo
+        market
+        originalMarket
+        currentPlannedDeliveryDate
+        deliveryDate
+        edition
+        pno34
+        modelYear
+        computedModelYear
+        structureWeek
+        primaryDriver
+        userIsPrimaryDriver
+    }
+}
+""".strip()
+
+
+def build_getconsumercarsv2_payload():
+    return {
+        "query": GET_CONSUMER_CARS_V2_QUERY,
+        "operationName": "GetConsumerCarsV2",
+        "variables": "{}",
+    }
+
+
+CAR_TELEMATICS_V2_QUERY = """
+query CarTelematicsV2($vins: [String!]!) {
+    carTelematicsV2(vins: $vins) {
+        health {
+            vin
+            brakeFluidLevelWarning
+            daysToService
+            distanceToServiceKm
+            engineCoolantLevelWarning
+            oilLevelWarning
+            serviceWarning
+            timestamp { seconds nanos }
+        }
+        battery {
+            vin
+            batteryChargeLevelPercentage
+            chargingStatus
+            estimatedChargingTimeToFullMinutes
+            estimatedDistanceToEmptyKm
+            timestamp { seconds nanos }
+        }
+        odometer {
+            vin
+            odometerMeters
+            timestamp { seconds nanos }
+        }
+    }
+}
+""".strip()
+
+
+def build_cartelematicsv2_payload(vin):
+    return {
+        "query": CAR_TELEMATICS_V2_QUERY,
+        "operationName": "CarTelematicsV2",
+        "variables": {"vins": vin},
+    }

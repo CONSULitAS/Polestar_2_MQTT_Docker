@@ -17,6 +17,8 @@ import traceback
 import os
 import sys
 import signal
+import importlib.util
+from pathlib import Path
 import requests
 import time
 from datetime import datetime, timedelta
@@ -27,7 +29,26 @@ import urllib.parse
 import base64
 import hashlib
 
-from graphql_queries import build_cartelematicsv2_payload, build_getconsumercarsv2_payload
+LOCAL_GRAPHQL_QUERIES_PATH = Path("/local-files/graphql_queries.py")
+
+
+def load_graphql_queries_module():
+    if LOCAL_GRAPHQL_QUERIES_PATH.is_file():
+        print(f"Loading local GraphQL overrides from {LOCAL_GRAPHQL_QUERIES_PATH}")
+        spec = importlib.util.spec_from_file_location("local_graphql_queries", LOCAL_GRAPHQL_QUERIES_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Could not load GraphQL overrides from {LOCAL_GRAPHQL_QUERIES_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    import graphql_queries as module
+    return module
+
+
+graphql_queries_module = load_graphql_queries_module()
+build_cartelematicsv2_payload = graphql_queries_module.build_cartelematicsv2_payload
+build_getconsumercarsv2_payload = graphql_queries_module.build_getconsumercarsv2_payload
 
 #####################################
 # read ENVIRONMENT variables
