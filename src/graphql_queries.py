@@ -13,50 +13,12 @@ query GetConsumerCarsV2 {
         deliveryDate
         edition
         pno34
-        # hasPerformancePackage
+        modelName
         modelYear
-        # commercialModelYears
         computedModelYear
         structureWeek
         primaryDriver
         userIsPrimaryDriver
-        #content {
-        #    exterior { code name description excluded }
-        #    exteriorDetails { code name description excluded }
-        #    interior { code name description excluded }
-        #    performancePackage { code name description excluded }
-        #    performanceOptimizationSpecification {
-        #        power { value unit }
-        #        torqueMax { value unit }
-        #        acceleration { value unit description }
-        #    }
-        #    wheels { code name description excluded }
-        #    plusPackage { code name description excluded }
-        #    pilotPackage { code name description excluded }
-        #    motor { name description excluded }
-        #    model { name code }
-        #    specification {
-        #        battery
-        #        bodyType
-        #        brakes
-        #        combustionEngine
-        #        electricMotors
-        #        performance
-        #        suspension
-        #        tireSizes
-        #        torque
-        #        totalHp
-        #        totalKw
-        #        trunkCapacity { label value }
-        #    }
-        #    dimensions {
-        #        wheelbase { label value }
-        #        groundClearanceWithPerformance { label value }
-        #        groundClearanceWithoutPerformance { label value }
-        #        dimensions { label value }
-        #    }
-        #    towbar { code name description excluded }
-        #}
     }
 }
 """.strip()
