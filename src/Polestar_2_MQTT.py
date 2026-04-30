@@ -314,6 +314,7 @@ def main():
                 POLESTAR_PASSWORD,
             )
         except (AuthError, TokenError) as exc:
+            client.publish(MQTT_LWT_TOPIC, "auth_error", qos=1, retain=True)
             wait_and_die("Authentication flow failed", str(exc))
 
         print("get_car_data()")
