@@ -21,13 +21,12 @@ import importlib.util
 from pathlib import Path
 import requests
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import json
 import paho.mqtt.client as mqtt
-import urllib.parse
-import base64
-import hashlib
+
+from auth import AuthError, PolestarAuthClient, TokenError
 
 LOCAL_GRAPHQL_QUERIES_PATH = Path("/local-files/graphql_queries.py")
 
@@ -94,6 +93,8 @@ POLESTAR_API_URL_V2   = f"{POLESTAR_BASE_URL}/mystar-v2"
 POLESTAR_REDIRECT_URI = "https://www.polestar.com/sign-in-callback"
 POLESTAR_ID_URI       = "https://polestarid.eu.polestar.com/as"
 CLIENT_ID             = "l3oopkc_10"
+
+auth_client = PolestarAuthClient(POLESTAR_ID_URI, POLESTAR_REDIRECT_URI, CLIENT_ID, TZ)
 
 # setup MQTT-Client
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -192,221 +193,7 @@ def wait_and_die(message, exception):
     return # never!
 
 #####################################
-# login to Polestar API
-
-# generate Code Verifiers and Code Challenge for PKCE
-def generate_code_verifier_and_challenge():
-    # use random value
-    code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode('utf-8')
-    
-    # Code Challenge is SHA256 hash of Code Verifier
-    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).rstrip(b'=').decode('utf-8')
-    
-    return code_verifier, code_challenge
-
-# get login_token, cookies and generate code_verifier, code_challenge
-# (polestar-xxx-widget.js: getLoginFlowTokens())
-def get_path_token():
-    # new Code Verifier on every login
-    code_verifier, code_challenge = generate_code_verifier_and_challenge()
-
-    # dictionary with parameters encoded in URL
-    params = urllib.parse.urlencode({
-        "response_type":         "code",
-        "client_id":             CLIENT_ID,
-        "redirect_uri":          POLESTAR_REDIRECT_URI,
-        "scope":                 "openid profile email customer:attributes",
-        "state":                 "ea5aa2860f894a9287a4819dd5ada85c",
-        "code_challenge":        code_challenge,
-        "code_challenge_method": "S256",
-    })
-    url = f"{POLESTAR_ID_URI}/authorization.oauth2?{params}"
-    response = requests.get(url, allow_redirects=False)
-    
-    if response.status_code not in [302, 303, 200]: # = 'see other'
-        wait_and_die(f"  response.status_code = {response.status_code}",
-                     "get_login_tokens(): login token not successfuly received")
-    
-    cookies    = response.headers.get('Set-Cookie')
-    cookie     = cookies.split(';')[0]
-    body=response.text
-    path_token=body.split("action:")[1].split("/")[2]
-    print(f"  code_verifier  = {code_verifier}")
-    print(f"  code_challenge = {code_challenge}")
-    print(f"  cookies        = {cookies}")
-    print(f"  cookie         = {cookie}")
-    print(f"  path_token     = {path_token}")
-    
-    return path_token, cookie, code_verifier  # return code_verifier also
-
-# login with token and credentials to get the code
-def perform_login(email, password, path_token, cookie):
-    url = f"{POLESTAR_ID_URI}/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Cookie": cookie
-    }
-    # Username and Password have to be URL encoded to avoid problems with special characters
-    data = f"pf.username={urllib.parse.quote(email, safe='')}&pf.pass={urllib.parse.quote(password, safe='')}"
-    
-    response = requests.post(url, headers=headers, data=data, allow_redirects=False)
-    
-    if response.status_code not in [302, 303]:
-        wait_and_die(f"  response.status_code = {response.status_code}",
-                     "perform_login(): login not successful, check your credentials")
-
-    max_age = response.headers['Strict-Transport-Security'].split("max-age=")[1].split(";")[0]
-    print(    f"  max_age    = {max_age}")
-    
-    try:
-        uid    = response.headers['Location'].split("uid=")[1].split("&")[0]
-        print(f"  uid        = {uid}")
-    except:
-        uid = None
-        print( "  uid        = NONE")
-    
-    try:
-        code    = response.headers['Location'].split("code=")[1].split("&")[0]
-        print(f"  code       = {code}")
-    except:
-        code = None
-        print( "  code       = NONE")
-
-    # handle missing code (e.g. accepting terms and conditions)
-    if code is None and uid:
-        print("   handle missing code")
-        data = {"pf.submit": True, "subject": uid}
-        url = f"{POLESTAR_ID_URI}/{path_token}/resume/as/authorization.ping?client_id={CLIENT_ID}"
-        response = requests.post(url, headers=headers, data=data, allow_redirects=False)
-        # TODO: try / except
-        code    = response.headers['Location'].split("code=")[1].split("&")[0]
-        print(f"   code = {code}")
-
-    # no token received? problem with login
-    if code is None:
-        wait_and_die(f"  code = {code} and uid = {uid}",
-                     "perform_login(): login not successfull: check your credentials at https://www.polestar.com/de/login/profile/")
-
-    return code
-
-# get API tokens
-def get_api_token(tokenRequestCode, code_verifier):
-    url = f"{POLESTAR_ID_URI}/token.oauth2"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    # dictionary for URL encoded data (requests will do the encoding)
-    payload = {
-        "grant_type":    "authorization_code",
-        "code":          tokenRequestCode,
-        "code_verifier": code_verifier,  # use code_verifier from parameters
-        "client_id":     CLIENT_ID,
-        "redirect_uri":  POLESTAR_REDIRECT_URI
-    }
-    response = requests.post(url, headers=headers, data=payload)
-    
-    if response.status_code != 200 or "errors" in response.json():
-        wait_and_die("  response.status_code = {response.status_code}\n"
-                     + json.dumps(response.json(), indent=2),
-                     "get_api_token(): no API token received")
-    
-    api_creds     = response.json()
-    access_token  = api_creds['access_token']
-    refresh_token = api_creds['refresh_token']
-    expires_in    = api_creds['expires_in']
-    expiry_time   = datetime.now() + timedelta(seconds=expires_in)
-    print( "  access_token  = " + str(access_token)[0:39] + "...")
-    print(f"  refresh_token = {refresh_token}")
-    print(f"  expires_in    = {expires_in} (seconds)")
-    print( "  expiry_time   = " + get_local_time(TZ, expiry_time))
-    
-    return access_token, expiry_time, refresh_token
-
-# login step by step
-def get_token(email, password):
-    print(" get_path_token()")
-    path_token, cookie, code_verifier = get_path_token()  # code_verifier will be generated on each login
-    print(" perform_login()")
-    auth_code = perform_login(email, password, path_token, cookie)
-    print(" get_api_token()")
-    access_token, expiry_time, refresh_token = get_api_token(auth_code, code_verifier)  # code_verifier is needed to get token
-
-    return access_token, expiry_time, refresh_token
-
-# refresh the access token using the refresh token
-def refresh_access_token(refresh_token):
-    """
-    Use the refresh token to obtain a new access token.
-    This avoids the need for a complete re-login process.
-
-    Args:
-        refresh_token (str): The refresh token obtained from the initial login.
-
-    Returns:
-        tuple: A tuple containing the new access token, expiry time, and new refresh token.
-    """
-    url = f"{POLESTAR_ID_URI}/token.oauth2"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    payload = {
-        "grant_type": "refresh_token",   # OAuth2 grant type for token refresh
-        "refresh_token": refresh_token,  # use the current refresh token
-        "client_id": CLIENT_ID           # client identifier for Polestar API
-    }
-    
-    # send POST request to refresh the access token
-    response = requests.post(url, headers=headers, data=payload)
-    
-    if response.status_code != 200 or "errors" in response.json():
-        wait_and_die(f"  response.status_code = {response.status_code}\n"
-                     + json.dumps(response.json(), indent=2),
-                     "refresh_access_token(): No new access token received")
-    
-    api_creds     = response.json()
-    access_token  = api_creds['access_token']   # new access token
-    refresh_token = api_creds['refresh_token']  # new refresh token (may change)
-    expires_in    = api_creds['expires_in']     # validity of the token in seconds
-    expiry_time   = datetime.now() + timedelta(seconds=expires_in)  # calculate expiry time
-    
-    print( "  access_token  = " + str(access_token)[:39] + "...")
-    print(f"  refresh_token = {refresh_token}")
-    print(f"  expires_in    = {expires_in} seconds")
-    print( "  expiry_time   = " + get_local_time(TZ, expiry_time))
-    
-    return access_token, expiry_time, refresh_token
-
-def ensure_valid_token(access_token, expiry_time, refresh_token, email, password):
-    """
-    Ensure the access token is valid. 
-    If the token is expired or close to expiry, it will be refreshed using the refresh token.
-    If no refresh token is available or the refresh fails, a full login is performed.
-
-    Args:
-        access_token (str): Current access token.
-        expiry_time (datetime): Expiration time of the current token.
-        refresh_token (str): Current refresh token.
-        email (str): User email to perform a full login if the refresh token is invalid.
-        password (str): User password to perform a full login if the refresh token is invalid.
-
-    Returns:
-        tuple: Returns the updated access token, expiry time, and refresh token.
-    """
-    # Check if the token will expire in the next 60 seconds or if no expiry time is set
-    if expiry_time is None or (datetime.now() >= expiry_time - timedelta(seconds=15)):
-        if refresh_token:
-            print(" refresh_access_token()")
-            try:
-                # Attempt to refresh the token
-                access_token, expiry_time, refresh_token = refresh_access_token(refresh_token)
-            except Exception as e:
-                print("get_token(), refresh_access_token() failed")
-                # If the refresh fails, fall back to the full login process
-                access_token, expiry_time, refresh_token = get_token(email, password)
-        else:
-            print("get_token(), no refresh token available")
-            access_token, expiry_time, refresh_token = get_token(email, password)
-    return access_token, expiry_time, refresh_token
+# login to Polestar API is encapsulated in src/auth.py
 
 #####################################
 # read data from Polestar API
@@ -518,13 +305,16 @@ def main():
     while True:
         # Ensure we have a valid access token (handle expiration, refresh, and full login)
         print("ensure_valid_token()")
-        access_token, expiry_time, refresh_token = ensure_valid_token(
-            access_token, 
-            expiry_time, 
-            refresh_token, 
-            POLESTAR_EMAIL, 
-            POLESTAR_PASSWORD
-        )
+        try:
+            access_token, expiry_time, refresh_token = auth_client.ensure_valid_token(
+                access_token,
+                expiry_time,
+                refresh_token,
+                POLESTAR_EMAIL,
+                POLESTAR_PASSWORD,
+            )
+        except (AuthError, TokenError) as exc:
+            wait_and_die("Authentication flow failed", str(exc))
 
         print("get_car_data()")
         car_data = get_car_data(POLESTAR_VIN, access_token)
