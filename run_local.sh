@@ -10,6 +10,7 @@ APP_FILE="${SCRIPT_DIR}/src/Polestar_2_MQTT.py"
 ENV_FILE="${SCRIPT_DIR}/.env"
 ENV_LOCAL_FILE="${SCRIPT_DIR}/.env_local"
 VENV_PYTHON="${VENV_DIR}/bin/python"
+APP_ARGS=("$@")
 
 if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 was not found in PATH." >&2
@@ -33,6 +34,17 @@ fi
 
 if [[ ! -f "${ENV_LOCAL_FILE}" ]]; then
     echo "Missing ${ENV_LOCAL_FILE}. Create it with the local runtime values from docker-compose.yml." >&2
+    exit 1
+fi
+
+if (( ${#APP_ARGS[@]} > 1 )); then
+    echo "Usage: ./run_local.sh [runonce]" >&2
+    exit 1
+fi
+
+if (( ${#APP_ARGS[@]} == 1 )) && [[ "${APP_ARGS[0]}" != "runonce" ]]; then
+    echo "Unsupported argument: ${APP_ARGS[0]}" >&2
+    echo "Usage: ./run_local.sh [runonce]" >&2
     exit 1
 fi
 
@@ -109,4 +121,4 @@ if (( ${#missing_optional_env[@]} > 0 )); then
 fi
 
 echo "Starting ${APP_FILE}"
-exec "${VENV_PYTHON}" -u "${APP_FILE}"
+exec "${VENV_PYTHON}" -u "${APP_FILE}" "${APP_ARGS[@]}"

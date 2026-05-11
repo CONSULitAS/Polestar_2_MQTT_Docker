@@ -102,6 +102,37 @@ The compose setup mounts `./local-files` into the container automatically.
 
 `run_local.sh` creates `.venv` if needed, installs Python dependencies, and then starts the app locally.
 
+For a single polling cycle without the endless loop, use:
+
+```bash
+./run_local.sh runonce
+```
+
+This is mainly intended for a local end-to-end check.
+
+## Unit tests
+
+Unit tests are based on `pytest` and mock all external dependencies such as the Polestar API and MQTT brokers.
+
+Quick start:
+1. run `./run_tests.sh`
+
+This script creates or reuses `.venv`, installs the test dependencies from `requirements-dev.txt`, runs `pytest`, and then starts a local end-to-end check with `./run_local.sh runonce` when `.env` and `.env_local` are available.
+If one of these files is missing, the end-to-end step is skipped with a clear message.
+
+You can also call pytest directly:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest
+```
+
+Current focus of the test suite:
+* auth and token handling in `src/auth.py`
+* GraphQL payload builders in `src/graphql_queries.py`
+* MQTT publishing helpers and API response parsing in `src/Polestar_2_MQTT.py`
+
 Discussions (in german ) here:
 https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
 

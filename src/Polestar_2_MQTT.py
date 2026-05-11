@@ -18,6 +18,7 @@ import os
 import sys
 import signal
 import importlib.util
+import argparse
 from pathlib import Path
 import requests
 import time
@@ -177,6 +178,16 @@ def mqtt_connect_openwb():
 #####################################
 # helper functions
 
+def parse_runtime_args(argv=None):
+    parser = argparse.ArgumentParser(description="Polestar API to MQTT gateway")
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        choices=["runonce"],
+        help="Run a single polling cycle and exit cleanly.",
+    )
+    return parser.parse_args(argv)
+
 def get_local_time(tz, time):
     # convert to local timezone in tz (e.g. Europe/Berlin)
     local_time = time.astimezone(pytz.timezone(tz))
@@ -191,6 +202,14 @@ def wait_and_die(message, exception):
     raise Exception(exception)
     
     return # never!
+
+
+def shutdown_clients():
+    client.disconnect()
+    client.loop_stop()
+    if OPENWB_PUBLISH:
+        client_openwb.disconnect()
+        client_openwb.loop_stop()
 
 #####################################
 # login to Polestar API is encapsulated in src/auth.py
@@ -284,7 +303,7 @@ def publish_soc_to_openwb(battery_data):
 # MAIN
 
 # main program: init and loop forever
-def main():
+def main(run_once=False):
     print("Polestar_2_MQTT.py startet")
     print("==========================")
 
@@ -339,6 +358,11 @@ def main():
         timestamp = datetime.now().astimezone(pytz.timezone(TZ)).strftime('%Y-%m-%d %H:%M:%S %Z%z')
         client.publish(MQTT_TIMESTAMP_TOPIC, timestamp, qos=1, retain=True)
 
+        if run_once:
+            print("runonce requested: completed one polling cycle, shutting down")
+            shutdown_clients()
+            return
+
         # wait POLESTAR_CYCLE seconds, but don't block
         print( "********************************************************************************")
         print(f"wait for {POLESTAR_CYCLE} seconds")
@@ -349,15 +373,14 @@ def main():
 def signal_handler(sig, frame):
     print("SIGTERM received: stop run")
     #server.shutdown() # server is undefined - reason unclear
-    client.disconnect()
-    if (OPENWB_PUBLISH):
-        client_openwb.disconnect()
+    shutdown_clients()
     sys.exit(0)
 
 if __name__ == "__main__":
     # catch all exeptions in main to get tracheback output
     try:
-        main()
+        runtime_args = parse_runtime_args(sys.argv[1:])
+        main(run_once=runtime_args.mode == "runonce")
     except Exception as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         # extract last line of traceback fpr 
