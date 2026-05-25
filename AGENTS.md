@@ -16,6 +16,9 @@ Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar 
 - GraphQL-Queries sollen bevorzugt über `local-files/graphql_queries.py` angepasst werden (statt Core-Code zu patchen).
 - Der Container mountet `./local-files` nach `/local-files`.
 
+## Task-Tracking
+- Projektaufgaben und Status werden in `TASKS.md` gepflegt: siehe [TASKS.md](TASKS.md).
+
 ## Arbeitsrichtlinien für Mitwirkende
 - Kleine, nachvollziehbare Änderungen mit klarer Commit-Beschreibung.
 - Keine Credentials, Tokens oder VINs in Code, Logs oder Commits.

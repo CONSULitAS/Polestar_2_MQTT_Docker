@@ -33,6 +33,29 @@ class PolestarAuthClient:
         ).rstrip(b"=").decode("utf-8")
         return code_verifier, code_challenge
 
+    @staticmethod
+    def _extract_query_param_from_location(location, param_name):
+        if not location:
+            return None
+
+        parsed = urllib.parse.urlparse(location)
+        values = urllib.parse.parse_qs(parsed.query).get(param_name, [])
+        return values[0] if values else None
+
+    @staticmethod
+    def _extract_path_token(response_body):
+        marker = "action:"
+        if marker not in response_body:
+            raise AuthError("get_path_token(): response body does not contain action marker")
+
+        action_value = response_body.split(marker, 1)[1].strip().split()[0]
+        # expected format contains '/<path_token>/' where path token is segment 2
+        segments = action_value.split("/")
+        if len(segments) < 3 or not segments[2]:
+            raise AuthError("get_path_token(): could not extract path token from response body")
+
+        return segments[2]
+
     def get_path_token(self):
         code_verifier, code_challenge = self._generate_code_verifier_and_challenge()
 
@@ -60,11 +83,7 @@ class PolestarAuthClient:
             raise AuthError("get_path_token(): missing Set-Cookie in response")
         cookie = cookies.split(";")[0]
 
-        body = response.text
-        try:
-            path_token = body.split("action:")[1].split("/")[2]
-        except Exception as exc:
-            raise AuthError("get_path_token(): could not extract path token from response body") from exc
+        path_token = self._extract_path_token(response.text)
 
         print(f"  code_verifier  = {code_verifier}")
         print(f"  code_challenge = {code_challenge}")
@@ -93,18 +112,31 @@ class PolestarAuthClient:
             max_age = max_age.split("max-age=")[1].split(";")[0]
         print(f"  max_age    = {max_age}")
 
-        location = response.headers.get("Location", "")
-        uid = location.split("uid=")[1].split("&")[0] if "uid=" in location else None
-        code = location.split("code=")[1].split("&")[0] if "code=" in location else None
+        location = response.headers.get("Location")
+        if not location:
+            raise AuthError("perform_login(): redirect response missing Location header")
+
+        uid = self._extract_query_param_from_location(location, "uid")
+        code = self._extract_query_param_from_location(location, "code")
         print(f"  uid        = {uid if uid else 'NONE'}")
         print(f"  code       = {code if code else 'NONE'}")
 
         if code is None and uid:
             print("   handle missing code")
-            data = {"pf.submit": True, "subject": uid}
-            response = requests.post(url, headers=headers, data=data, allow_redirects=False)
-            location = response.headers.get("Location", "")
-            code = location.split("code=")[1].split("&")[0] if "code=" in location else None
+            follow_up_data = {"pf.submit": True, "subject": uid}
+            follow_up = requests.post(url, headers=headers, data=follow_up_data, allow_redirects=False)
+
+            if follow_up.status_code not in (302, 303):
+                raise AuthError(
+                    "perform_login(): follow-up request did not return redirect "
+                    f"(status={follow_up.status_code})"
+                )
+
+            follow_up_location = follow_up.headers.get("Location")
+            if not follow_up_location:
+                raise AuthError("perform_login(): follow-up redirect missing Location header")
+
+            code = self._extract_query_param_from_location(follow_up_location, "code")
             print(f"   code = {code}")
 
         if code is None:

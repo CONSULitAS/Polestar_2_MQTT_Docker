@@ -69,6 +69,21 @@ def test_get_path_token_raises_when_cookie_missing(auth_client, monkeypatch, mak
         auth_client.get_path_token()
 
 
+def test_get_path_token_raises_when_action_marker_missing(auth_client, monkeypatch, make_response):
+    monkeypatch.setattr(
+        auth.requests,
+        "get",
+        lambda url, allow_redirects=False: make_response(
+            status_code=200,
+            headers={"Set-Cookie": "sessionid=abc123; Path=/; HttpOnly"},
+            text="no-action-here",
+        ),
+    )
+
+    with pytest.raises(AuthError, match="does not contain action marker"):
+        auth_client.get_path_token()
+
+
 def test_perform_login_returns_code_from_redirect(auth_client, monkeypatch, make_response):
     def fake_post(url, headers=None, data=None, allow_redirects=False):
         return make_response(
@@ -84,6 +99,17 @@ def test_perform_login_returns_code_from_redirect(auth_client, monkeypatch, make
     code = auth_client.perform_login("user@example.com", "secret", "path-token", "cookie=value")
 
     assert code == "auth-code-123"
+
+
+def test_perform_login_raises_when_location_header_missing(auth_client, monkeypatch, make_response):
+    monkeypatch.setattr(
+        auth.requests,
+        "post",
+        lambda url, headers=None, data=None, allow_redirects=False: make_response(status_code=302, headers={}),
+    )
+
+    with pytest.raises(AuthError, match="missing Location header"):
+        auth_client.perform_login("user@example.com", "secret", "path-token", "cookie=value")
 
 
 def test_perform_login_retries_when_uid_is_returned_first(auth_client, monkeypatch, make_response):
@@ -109,6 +135,27 @@ def test_perform_login_retries_when_uid_is_returned_first(auth_client, monkeypat
     code = auth_client.perform_login("user@example.com", "secret", "path-token", "cookie=value")
 
     assert code == "follow-up-code"
+
+
+def test_perform_login_raises_when_follow_up_location_missing(auth_client, monkeypatch, make_response):
+    responses = iter(
+        [
+            make_response(
+                status_code=302,
+                headers={"Location": "https://redirect.example/callback?uid=user-123"},
+            ),
+            make_response(status_code=302, headers={}),
+        ]
+    )
+
+    monkeypatch.setattr(
+        auth.requests,
+        "post",
+        lambda url, headers=None, data=None, allow_redirects=False: next(responses),
+    )
+
+    with pytest.raises(AuthError, match="follow-up redirect missing Location header"):
+        auth_client.perform_login("user@example.com", "secret", "path-token", "cookie=value")
 
 
 def test_get_api_token_returns_tokens_and_expiry(auth_client, monkeypatch, make_response):
