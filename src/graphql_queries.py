@@ -47,7 +47,7 @@ query CarTelematicsV2($vins: [String!]!) {
         battery {
             vin
             batteryChargeLevelPercentage
-            # chargingStatus
+            chargingStatusV2
             estimatedChargingTimeToFullMinutes
             estimatedDistanceToEmptyKm
             timestamp { seconds nanos }
