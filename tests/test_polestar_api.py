@@ -39,7 +39,7 @@ def test_get_car_data_raises_value_error_when_vin_is_missing(monkeypatch, make_r
         app.get_car_data("VIN123", "token-123")
 
 
-def test_get_car_data_calls_wait_and_die_for_unexpected_shape(monkeypatch, make_response):
+def test_get_car_data_calls_publish_error_and_raise_for_unexpected_shape(monkeypatch, make_response):
     monkeypatch.setattr(
         app.requests,
         "post",
@@ -49,10 +49,10 @@ def test_get_car_data_calls_wait_and_die_for_unexpected_shape(monkeypatch, make_
         ),
     )
 
-    def fake_wait_and_die(message, exception):
+    def fake_publish_error_and_raise(message, exception):
         raise RuntimeError(f"{message} | {exception}")
 
-    monkeypatch.setattr(app, "wait_and_die", fake_wait_and_die)
+    monkeypatch.setattr(app, "publish_error_and_raise", fake_publish_error_and_raise)
 
     with pytest.raises(RuntimeError, match="unexpected API response"):
         app.get_car_data("VIN123", "token-123")
@@ -79,7 +79,7 @@ def test_get_car_telemetry_data_returns_api_data(monkeypatch, make_response):
     assert result == telemetry_payload["data"]["carTelematicsV2"]
 
 
-def test_get_car_telemetry_data_calls_wait_and_die_on_http_error(monkeypatch, make_response):
+def test_get_car_telemetry_data_calls_publish_error_and_raise_on_http_error(monkeypatch, make_response):
     monkeypatch.setattr(
         app.requests,
         "post",
@@ -89,10 +89,10 @@ def test_get_car_telemetry_data_calls_wait_and_die_on_http_error(monkeypatch, ma
         ),
     )
 
-    def fake_wait_and_die(message, exception):
+    def fake_publish_error_and_raise(message, exception):
         raise RuntimeError(f"{message} | {exception}")
 
-    monkeypatch.setattr(app, "wait_and_die", fake_wait_and_die)
+    monkeypatch.setattr(app, "publish_error_and_raise", fake_publish_error_and_raise)
 
     with pytest.raises(RuntimeError, match="no data received"):
         app.get_car_telemetry_data("VIN123", "token-123")

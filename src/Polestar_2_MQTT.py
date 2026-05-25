@@ -146,7 +146,7 @@ def mqtt_backoff_attempt(client, method, max_retries=20, initial_delay=1, delay_
             delay = min(delay * 2, delay_max)  # Double the delay but do not exceed delay_max
     else:
         elapsed_time = time.time() - start_time  # Calculate elapsed time
-        wait_and_die(f"    MQTT ({client_address}): Could not {'connect' if method == client.connect else 'reconnect'} after {max_retries} attempts. Exiting.",
+        publish_error_and_raise(f"    MQTT ({client_address}): Could not {'connect' if method == client.connect else 'reconnect'} after {max_retries} attempts. Exiting.",
                      f"    MQTT ({client_address}): broker down for {elapsed_time:.0f} seconds!")
 
 # callback for MQTT connection handling
@@ -199,7 +199,7 @@ def get_local_time(tz, time):
     # as formated time stamp
     return local_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
 
-def wait_and_die(message, exception, status_payload=MQTT_LWT_MESSAGE_ERROR):
+def publish_error_and_raise(message, exception, status_payload=MQTT_LWT_MESSAGE_ERROR):
     print(message)
     client.publish(MQTT_LWT_TOPIC, status_payload, qos=1, retain=True)
     client.publish(MQTT_LAST_ERROR_TOPIC, str(message), qos=1, retain=True)
@@ -238,7 +238,7 @@ def get_car_data(vin, access_token):
         response_json = {"raw_response": response.text}
 
     if response.status_code != 200:
-        wait_and_die(f"  response.status_code = {response.status_code}\n"
+        publish_error_and_raise(f"  response.status_code = {response.status_code}\n"
                      + json.dumps(response_json, indent=2),
                      "get_car_data() no data received")
 
@@ -246,7 +246,7 @@ def get_car_data(vin, access_token):
     consumer_cars = car_data.get('getConsumerCarsV2')
 
     if not isinstance(consumer_cars, list):
-        wait_and_die("get_car_data(): unexpected API response\n"
+        publish_error_and_raise("get_car_data(): unexpected API response\n"
                      + json.dumps(response_json, indent=2),
                      "get_car_data(): getConsumerCarsV2 missing or invalid")
 
@@ -270,7 +270,7 @@ def get_car_telemetry_data(vin, access_token):
     response = requests.post(url, headers=headers, json=build_cartelematicsv2_payload(vin))
     if response.status_code != 200:
         print(response.json())
-        wait_and_die("  response.status_code = {response.status_code}\n"
+        publish_error_and_raise("  response.status_code = {response.status_code}\n"
                      + json.dumps(response.json(), indent=2),
                      "get_car_telemetry_data() no data received")
     return response.json()['data']['carTelematicsV2']
@@ -339,9 +339,9 @@ def main(run_once=False):
                 POLESTAR_PASSWORD,
             )
         except AuthError as exc:
-            wait_and_die("Authentication flow failed", str(exc), status_payload="auth_error")
+            publish_error_and_raise("Authentication flow failed", str(exc), status_payload="auth_error")
         except TokenError as exc:
-            wait_and_die("Token flow failed", str(exc), status_payload="token_error")
+            publish_error_and_raise("Token flow failed", str(exc), status_payload="token_error")
 
         print("get_car_data()")
         car_data = get_car_data(POLESTAR_VIN, access_token)
