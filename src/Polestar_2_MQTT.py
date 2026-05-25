@@ -87,6 +87,8 @@ MQTT_LWT_MESSAGE_DEAD  = "offline"
 MQTT_LWT_MESSAGE_ERROR = "error"
 MQTT_LWT_MESSAGE_ALIVE = "online"
 MQTT_TIMESTAMP_TOPIC   = f"{MQTT_BASE_TOPIC}/container/last_update"
+MQTT_LAST_ERROR_TOPIC  = f"{MQTT_BASE_TOPIC}/container/last_error"
+MQTT_LAST_EXCEPTION_TOPIC = f"{MQTT_BASE_TOPIC}/container/last_exception"
 
 # API config
 POLESTAR_BASE_URL     = "https://pc-api.polestar.com/eu-north-1"
@@ -152,6 +154,8 @@ def mqtt_on_connect(client, userdata, flags, rc, properties):
     print(f"    MQTT connected with result code '{rc}': {MQTT_LWT_TOPIC}={MQTT_LWT_MESSAGE_ALIVE}")
     # set LWT to alive status
     client.publish(MQTT_LWT_TOPIC, MQTT_LWT_MESSAGE_ALIVE, qos=1, retain=True)
+    client.publish(MQTT_LAST_ERROR_TOPIC, "", qos=1, retain=True)
+    client.publish(MQTT_LAST_EXCEPTION_TOPIC, "", qos=1, retain=True)
 
 # callback for MQTT disconnection handling
 def mqtt_on_disconnect(client, userdata, rc, properties=None, reason_code=None):
@@ -195,12 +199,14 @@ def get_local_time(tz, time):
     # as formated time stamp
     return local_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
 
-def wait_and_die(message, exception):
+def wait_and_die(message, exception, status_payload=MQTT_LWT_MESSAGE_ERROR):
     print(message)
-    client.publish(MQTT_LWT_TOPIC, MQTT_LWT_MESSAGE_ERROR, qos=1, retain=True)
+    client.publish(MQTT_LWT_TOPIC, status_payload, qos=1, retain=True)
+    client.publish(MQTT_LAST_ERROR_TOPIC, str(message), qos=1, retain=True)
+    client.publish(MQTT_LAST_EXCEPTION_TOPIC, str(exception), qos=1, retain=True)
     time.sleep(POLESTAR_CYCLE)  # wait POLESTAR_CYCLE seconds to reduce retry count
     raise Exception(exception)
-    
+
     return # never!
 
 
@@ -332,9 +338,10 @@ def main(run_once=False):
                 POLESTAR_EMAIL,
                 POLESTAR_PASSWORD,
             )
-        except (AuthError, TokenError) as exc:
-            client.publish(MQTT_LWT_TOPIC, "auth_error", qos=1, retain=True)
-            wait_and_die("Authentication flow failed", str(exc))
+        except AuthError as exc:
+            wait_and_die("Authentication flow failed", str(exc), status_payload="auth_error")
+        except TokenError as exc:
+            wait_and_die("Token flow failed", str(exc), status_payload="token_error")
 
         print("get_car_data()")
         car_data = get_car_data(POLESTAR_VIN, access_token)
