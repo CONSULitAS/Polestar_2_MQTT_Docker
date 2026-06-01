@@ -105,7 +105,10 @@ def test_perform_login_raises_when_location_header_missing(auth_client, monkeypa
     monkeypatch.setattr(
         auth.requests,
         "post",
-        lambda url, headers=None, data=None, allow_redirects=False: make_response(status_code=302, headers={}),
+        lambda url, headers=None, data=None, allow_redirects=False: make_response(
+            status_code=302,
+            headers={},
+        ),
     )
 
     with pytest.raises(AuthError, match="missing Location header"):
@@ -137,7 +140,11 @@ def test_perform_login_retries_when_uid_is_returned_first(auth_client, monkeypat
     assert code == "follow-up-code"
 
 
-def test_perform_login_raises_when_follow_up_location_missing(auth_client, monkeypatch, make_response):
+def test_perform_login_raises_when_follow_up_location_missing(
+    auth_client,
+    monkeypatch,
+    make_response,
+):
     responses = iter(
         [
             make_response(
@@ -178,7 +185,11 @@ def test_get_api_token_returns_tokens_and_expiry(auth_client, monkeypatch, make_
 
     assert access_token == "access-token"
     assert refresh_token == "refresh-token"
-    assert before_call + timedelta(seconds=295) <= expiry_time <= before_call + timedelta(seconds=305)
+    assert (
+        before_call + timedelta(seconds=295)
+        <= expiry_time
+        <= before_call + timedelta(seconds=305)
+    )
 
 
 def test_get_api_token_raises_for_error_payload(auth_client, monkeypatch, make_response):

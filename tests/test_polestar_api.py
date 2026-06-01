@@ -39,7 +39,10 @@ def test_get_car_data_raises_value_error_when_vin_is_missing(monkeypatch, make_r
         app.get_car_data("VIN123", "token-123")
 
 
-def test_get_car_data_calls_publish_error_and_raise_for_unexpected_shape(monkeypatch, make_response):
+def test_get_car_data_calls_publish_error_and_raise_for_unexpected_shape(
+    monkeypatch,
+    make_response,
+):
     monkeypatch.setattr(
         app.requests,
         "post",
@@ -71,7 +74,10 @@ def test_get_car_telemetry_data_returns_api_data(monkeypatch, make_response):
     monkeypatch.setattr(
         app.requests,
         "post",
-        lambda url, headers=None, json=None: make_response(status_code=200, json_data=telemetry_payload),
+        lambda url, headers=None, json=None: make_response(
+            status_code=200,
+            json_data=telemetry_payload,
+        ),
     )
 
     result = app.get_car_telemetry_data("VIN123", "token-123")
@@ -79,7 +85,10 @@ def test_get_car_telemetry_data_returns_api_data(monkeypatch, make_response):
     assert result == telemetry_payload["data"]["carTelematicsV2"]
 
 
-def test_get_car_telemetry_data_calls_publish_error_and_raise_on_http_error(monkeypatch, make_response):
+def test_get_car_telemetry_data_calls_publish_error_and_raise_on_http_error(
+    monkeypatch,
+    make_response,
+):
     monkeypatch.setattr(
         app.requests,
         "post",
@@ -120,7 +129,11 @@ def test_main_runonce_completes_single_cycle_and_shuts_down(monkeypatch):
             "refresh-123",
         ),
     )
-    monkeypatch.setattr(app, "get_car_data", lambda vin, access_token: {"vin": vin, "modelName": "P2"})
+    monkeypatch.setattr(
+        app,
+        "get_car_data",
+        lambda vin, access_token: {"vin": vin, "modelName": "P2"},
+    )
     monkeypatch.setattr(
         app,
         "get_car_telemetry_data",

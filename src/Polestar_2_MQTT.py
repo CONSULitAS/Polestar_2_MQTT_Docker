@@ -35,7 +35,10 @@ LOCAL_GRAPHQL_QUERIES_PATH = Path("/local-files/graphql_queries.py")
 def load_graphql_queries_module():
     if LOCAL_GRAPHQL_QUERIES_PATH.is_file():
         print(f"Loading local GraphQL overrides from {LOCAL_GRAPHQL_QUERIES_PATH}")
-        spec = importlib.util.spec_from_file_location("local_graphql_queries", LOCAL_GRAPHQL_QUERIES_PATH)
+        spec = importlib.util.spec_from_file_location(
+            "local_graphql_queries",
+            LOCAL_GRAPHQL_QUERIES_PATH,
+        )
         if spec is None or spec.loader is None:
             raise ImportError(f"Could not load GraphQL overrides from {LOCAL_GRAPHQL_QUERIES_PATH}")
         module = importlib.util.module_from_spec(spec)
@@ -135,19 +138,35 @@ def mqtt_backoff_attempt(client, method, max_retries=20, initial_delay=1, delay_
 
     for attempt in range(1, max_retries + 1):
         try:
-            print(f"    MQTT ({client_address}): attempt {attempt} to {'connect' if method == client.connect else 'reconnect'}... (waiting {delay} seconds)")
+            action = "connect" if method == client.connect else "reconnect"
+            print(
+                f"    MQTT ({client_address}): attempt {attempt} to "
+                f"{action}... (waiting {delay} seconds)"
+            )
             time.sleep(delay)  # Wait before trying to connect or reconnect
             method()  # Call the connect or reconnect method
             elapsed_time = time.time() - start_time  # Calculate elapsed time
-            print(f"    MQTT ({client_address}): {'Connected' if method == client.connect else 'Reconnected'} successfully after {elapsed_time:.2f} seconds!")
+            connected_text = (
+                "Connected" if method == client.connect else "Reconnected"
+            )
+            print(
+                f"    MQTT ({client_address}): {connected_text} successfully "
+                f"after {elapsed_time:.2f} seconds!"
+            )
             break  # If connection or reconnection is successful, exit the loop
         except Exception as e:
             print(f"    MQTT ({client_address}): attempt {attempt} failed: {e}")
             delay = min(delay * 2, delay_max)  # Double the delay but do not exceed delay_max
     else:
         elapsed_time = time.time() - start_time  # Calculate elapsed time
-        publish_error_and_raise(f"    MQTT ({client_address}): Could not {'connect' if method == client.connect else 'reconnect'} after {max_retries} attempts. Exiting.",
-                     f"    MQTT ({client_address}): broker down for {elapsed_time:.0f} seconds!")
+        action = "connect" if method == client.connect else "reconnect"
+        publish_error_and_raise(
+            (
+                f"    MQTT ({client_address}): Could not {action} after "
+                f"{max_retries} attempts. Exiting."
+            ),
+            f"    MQTT ({client_address}): broker down for {elapsed_time:.0f} seconds!",
+        )
 
 # callback for MQTT connection handling
 def mqtt_on_connect(client, userdata, flags, rc, properties):
@@ -169,14 +188,22 @@ def mqtt_connect():
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)   
     client.on_connect     = mqtt_on_connect
     client.on_disconnect  = mqtt_on_disconnect
-    mqtt_backoff_attempt(client, lambda: client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL))
+    mqtt_backoff_attempt(
+        client,
+        lambda: client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL),
+    )
     client.loop_start()
 
 # connect to OpenWB built in MQTT broker
 def mqtt_connect_openwb():   
     client_openwb.on_connect    = mqtt_on_connect
     client_openwb.on_disconnect = mqtt_on_disconnect
-    mqtt_backoff_attempt(client_openwb, lambda: client_openwb.connect(OPENWB_HOST, OPENWB_PORT, MQTT_KEEPALIVE_INTERVAL))
+    mqtt_backoff_attempt(
+        client_openwb,
+        lambda: client_openwb.connect(
+            OPENWB_HOST, OPENWB_PORT, MQTT_KEEPALIVE_INTERVAL
+        ),
+    )
     client_openwb.loop_start()
 
 #####################################
@@ -339,7 +366,11 @@ def main(run_once=False):
                 POLESTAR_PASSWORD,
             )
         except AuthError as exc:
-            publish_error_and_raise("Authentication flow failed", str(exc), status_payload="auth_error")
+            publish_error_and_raise(
+                "Authentication flow failed",
+                str(exc),
+                status_payload="auth_error",
+            )
         except TokenError as exc:
             publish_error_and_raise("Token flow failed", str(exc), status_payload="token_error")
 

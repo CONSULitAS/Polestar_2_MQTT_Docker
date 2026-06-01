@@ -124,7 +124,12 @@ class PolestarAuthClient:
         if code is None and uid:
             print("   handle missing code")
             follow_up_data = {"pf.submit": True, "subject": uid}
-            follow_up = requests.post(url, headers=headers, data=follow_up_data, allow_redirects=False)
+            follow_up = requests.post(
+                url,
+                headers=headers,
+                data=follow_up_data,
+                allow_redirects=False,
+            )
 
             if follow_up.status_code not in (302, 303):
                 raise AuthError(
