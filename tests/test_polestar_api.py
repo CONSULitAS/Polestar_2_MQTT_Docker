@@ -3,6 +3,9 @@ from unittest.mock import Mock
 
 import Polestar_2_MQTT as app
 
+#####################################
+# tests for API response handling
+
 
 def test_get_car_data_returns_matching_vin(monkeypatch, make_response):
     car_payload = {
@@ -111,6 +114,9 @@ def test_parse_runtime_args_supports_runonce():
     args = app.parse_runtime_args(["runonce"])
 
     assert args.mode == "runonce"
+
+#####################################
+# tests for run-once main flow
 
 
 def test_main_runonce_completes_single_cycle_and_shuts_down(monkeypatch):

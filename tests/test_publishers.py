@@ -2,6 +2,9 @@ from unittest.mock import Mock, call
 
 import Polestar_2_MQTT as app
 
+#####################################
+# tests for MQTT publishers and shutdown
+
 
 def test_publish_json_as_mqtt_flattens_nested_structures(monkeypatch):
     fake_client = Mock()

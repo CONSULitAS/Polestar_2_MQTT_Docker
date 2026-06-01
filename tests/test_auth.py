@@ -7,6 +7,9 @@ import pytest
 import auth
 from auth import AuthError, PolestarAuthClient, TokenError
 
+#####################################
+# fixtures
+
 
 @pytest.fixture
 def auth_client():
@@ -16,6 +19,9 @@ def auth_client():
         "client-id",
         "Europe/Berlin",
     )
+
+#####################################
+# tests for auth flow helpers
 
 
 def test_generate_code_verifier_and_challenge_returns_matching_pair():
@@ -82,6 +88,9 @@ def test_get_path_token_raises_when_action_marker_missing(auth_client, monkeypat
 
     with pytest.raises(AuthError, match="does not contain action marker"):
         auth_client.get_path_token()
+
+#####################################
+# tests for credential login flow
 
 
 def test_perform_login_returns_code_from_redirect(auth_client, monkeypatch, make_response):
@@ -164,6 +173,9 @@ def test_perform_login_raises_when_follow_up_location_missing(
     with pytest.raises(AuthError, match="follow-up redirect missing Location header"):
         auth_client.perform_login("user@example.com", "secret", "path-token", "cookie=value")
 
+#####################################
+# tests for token endpoints
+
 
 def test_get_api_token_returns_tokens_and_expiry(auth_client, monkeypatch, make_response):
     before_call = datetime.now()
@@ -204,6 +216,9 @@ def test_get_api_token_raises_for_error_payload(auth_client, monkeypatch, make_r
 
     with pytest.raises(TokenError, match="token exchange failed"):
         auth_client.get_api_token("bad-code", "verifier")
+
+#####################################
+# tests for token lifecycle handling
 
 
 def test_ensure_valid_token_returns_existing_token_when_not_expiring(auth_client):

@@ -39,6 +39,9 @@ echo "Upgrading pip tooling"
 echo "Installing Python test dependencies"
 "${VENV_PYTHON}" -m pip install --quiet --upgrade -r "${REQUIREMENTS_FILE}"
 
+echo "Running ruff lint checks"
+"${VENV_PYTHON}" -m ruff check src tests
+
 echo "Running pytest"
 "${VENV_PYTHON}" -m pytest "$@"
 

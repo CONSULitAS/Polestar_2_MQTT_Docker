@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 
 import requests
 
+#####################################
+# custom exceptions
+
 
 class AuthError(Exception):
     """Raised when the full login flow fails."""
@@ -19,14 +22,21 @@ class TokenError(Exception):
 
 
 class PolestarAuthClient:
+    #####################################
+    # setup
+
     def __init__(self, id_uri, redirect_uri, client_id, tz):
         self.id_uri = id_uri
         self.redirect_uri = redirect_uri
         self.client_id = client_id
         self.tz = tz
 
+    #####################################
+    # internal helper methods
+
     @staticmethod
     def _generate_code_verifier_and_challenge():
+        # PKCE pair used for authorization code flow.
         code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode("utf-8")
         code_challenge = base64.urlsafe_b64encode(
             hashlib.sha256(code_verifier.encode("utf-8")).digest()
@@ -35,6 +45,7 @@ class PolestarAuthClient:
 
     @staticmethod
     def _extract_query_param_from_location(location, param_name):
+        # Extract the first query parameter value from a redirect location.
         if not location:
             return None
 
@@ -44,6 +55,7 @@ class PolestarAuthClient:
 
     @staticmethod
     def _extract_path_token(response_body):
+        # Parse the temporary path token from the authorization HTML response.
         marker = "action:"
         if marker not in response_body:
             raise AuthError("get_path_token(): response body does not contain action marker")
@@ -56,7 +68,11 @@ class PolestarAuthClient:
 
         return segments[2]
 
+    #####################################
+    # auth/token flow
+
     def get_path_token(self):
+        # Start the auth flow and collect cookie + path token for login submission.
         code_verifier, code_challenge = self._generate_code_verifier_and_challenge()
 
         params = urllib.parse.urlencode(
@@ -94,6 +110,7 @@ class PolestarAuthClient:
         return path_token, cookie, code_verifier
 
     def perform_login(self, email, password, path_token, cookie):
+        # Submit credentials and extract authorization code from redirect.
         url = f"{self.id_uri}/{path_token}/resume/as/authorization.ping?client_id={self.client_id}"
         headers = {"Content-Type": "application/x-www-form-urlencoded", "Cookie": cookie}
         data = (
@@ -122,6 +139,7 @@ class PolestarAuthClient:
         print(f"  code       = {code if code else 'NONE'}")
 
         if code is None and uid:
+            # Some responses first return uid and require a follow-up submit.
             print("   handle missing code")
             follow_up_data = {"pf.submit": True, "subject": uid}
             follow_up = requests.post(
@@ -152,6 +170,7 @@ class PolestarAuthClient:
         return code
 
     def get_api_token(self, token_request_code, code_verifier):
+        # Exchange authorization code for access/refresh token pair.
         url = f"{self.id_uri}/token.oauth2"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         payload = {
@@ -188,6 +207,7 @@ class PolestarAuthClient:
         return access_token, expiry_time, refresh_token
 
     def get_token(self, email, password):
+        # Full login flow: path token -> credential login -> token exchange.
         print(" get_path_token()")
         path_token, cookie, code_verifier = self.get_path_token()
         print(" perform_login()")
@@ -196,6 +216,7 @@ class PolestarAuthClient:
         return self.get_api_token(auth_code, code_verifier)
 
     def refresh_access_token(self, refresh_token):
+        # Refresh access token using the current refresh token.
         url = f"{self.id_uri}/token.oauth2"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         payload = {
@@ -230,6 +251,7 @@ class PolestarAuthClient:
         return access_token, expiry_time, new_refresh_token
 
     def ensure_valid_token(self, access_token, expiry_time, refresh_token, email, password):
+        # Refresh shortly before expiry; otherwise keep current token.
         if expiry_time is None or datetime.now() >= expiry_time - timedelta(seconds=15):
             if refresh_token:
                 print(" refresh_access_token()")

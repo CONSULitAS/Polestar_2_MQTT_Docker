@@ -3,6 +3,9 @@ from graphql_queries import (
     build_getconsumercarsv2_payload,
 )
 
+#####################################
+# tests for GraphQL payload builders
+
 
 def test_build_getconsumercarsv2_payload_uses_expected_operation_and_query():
     payload = build_getconsumercarsv2_payload()
