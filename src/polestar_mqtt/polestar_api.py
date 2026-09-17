@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import math
+import random
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from types import TracebackType
 from typing import Any, Callable
 from urllib.parse import quote
@@ -18,6 +21,10 @@ DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
 DEFAULT_READ_TIMEOUT_SECONDS = 30.0
 BATTERY_SCOPE = "pdp-telemetry/battery"
 TOKEN_EXPIRY_MARGIN_SECONDS = 60.0
+TRANSIENT_HTTP_STATUS_CODES = frozenset({429, 500, 503})
+DEFAULT_MAX_TRANSIENT_RETRIES = 3
+DEFAULT_INITIAL_BACKOFF_SECONDS = 1.0
+DEFAULT_MAX_BACKOFF_SECONDS = 30.0
 
 
 class TokenProviderError(RuntimeError):
@@ -42,6 +49,34 @@ class DataPortalRequestError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+class DataPortalAuthenticationError(DataPortalRequestError):
+    """Raised when a request remains unauthorized after token renewal."""
+
+
+class DataPortalBadRequestError(DataPortalRequestError):
+    """Raised when the API rejects malformed request parameters."""
+
+
+class DataPortalForbiddenError(DataPortalRequestError):
+    """Raised when the credential lacks scope or vehicle permission."""
+
+
+class DataPortalNotFoundError(DataPortalRequestError):
+    """Raised when the requested vehicle data is unavailable."""
+
+
+class DataPortalRateLimitError(DataPortalRequestError):
+    """Raised when rate limiting persists after bounded retries."""
+
+
+class DataPortalServerError(DataPortalRequestError):
+    """Raised when an internal API error persists after bounded retries."""
+
+
+class DataPortalServiceUnavailableError(DataPortalRequestError):
+    """Raised when the vehicle-state provider remains unavailable."""
 
 
 class DataPortalResponseError(RuntimeError):
@@ -235,17 +270,34 @@ class DataPortalClient:
         http_client: DataPortalHttpClient,
         token_provider: TokenProvider,
         account_id: str,
+        *,
+        max_transient_retries: int = DEFAULT_MAX_TRANSIENT_RETRIES,
+        initial_backoff: float = DEFAULT_INITIAL_BACKOFF_SECONDS,
+        max_backoff: float = DEFAULT_MAX_BACKOFF_SECONDS,
+        sleep: Callable[[float], None] = time.sleep,
+        random_uniform: Callable[[float, float], float] = random.uniform,
+        utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         if not account_id.strip():
             raise ValueError("account_id must not be empty")
+        if max_transient_retries < 0:
+            raise ValueError("max_transient_retries must not be negative")
+        if initial_backoff <= 0 or max_backoff <= 0:
+            raise ValueError("backoff values must be greater than zero")
         self._http_client = http_client
         self._token_provider = token_provider
         self._account_id = account_id.strip()
+        self._max_transient_retries = max_transient_retries
+        self._initial_backoff = initial_backoff
+        self._max_backoff = max_backoff
+        self._sleep = sleep
+        self._random_uniform = random_uniform
+        self._utcnow = utcnow
 
-    def authorization_headers(self) -> dict[str, str]:
+    def authorization_headers(self, *, force_refresh: bool = False) -> dict[str, str]:
         """Build the required headers without persisting them on the session."""
 
-        token = self._token_provider.get_token()
+        token = self._token_provider.get_token(force_refresh=force_refresh)
         return {
             "Accept": "application/json",
             "Authorization": f"{token.token_type} {token.value}",
@@ -255,22 +307,7 @@ class DataPortalClient:
     def list_vehicles(self) -> list[str]:
         """Return the VINs authorized for the configured account binding."""
 
-        try:
-            response = self._http_client.request(
-                "GET",
-                "/v1/vehicles",
-                headers=self.authorization_headers(),
-            )
-        except requests.RequestException as error:
-            raise DataPortalRequestError(
-                f"Vehicle list request failed: {type(error).__name__}"
-            ) from error
-
-        if response.status_code != 200:
-            raise DataPortalRequestError(
-                f"Vehicle list endpoint returned HTTP {response.status_code}",
-                status_code=response.status_code,
-            )
+        response = self._authorized_get("/v1/vehicles", "Vehicle list")
 
         try:
             payload = response.json()
@@ -311,22 +348,10 @@ class DataPortalClient:
         if not VIN_PATTERN.fullmatch(normalized_vin):
             raise ValueError("vin must be a valid 17-character VIN")
         encoded_vin = quote(normalized_vin, safe="")
-        try:
-            response = self._http_client.request(
-                "GET",
-                f"/v1/vehicles/{encoded_vin}/telemetry/battery",
-                headers=self.authorization_headers(),
-            )
-        except requests.RequestException as error:
-            raise DataPortalRequestError(
-                f"Battery request failed: {type(error).__name__}"
-            ) from error
-
-        if response.status_code != 200:
-            raise DataPortalRequestError(
-                f"Battery endpoint returned HTTP {response.status_code}",
-                status_code=response.status_code,
-            )
+        response = self._authorized_get(
+            f"/v1/vehicles/{encoded_vin}/telemetry/battery",
+            "Battery",
+        )
 
         try:
             payload = response.json()
@@ -338,7 +363,117 @@ class DataPortalClient:
             raise DataPortalResponseError(
                 "Battery endpoint returned no valid data object"
             )
+        self._validate_response_vin(payload, normalized_vin)
         return payload
+
+    def _authorized_get(self, path: str, endpoint_name: str) -> requests.Response:
+        transient_retries = 0
+        token_refreshed = False
+
+        while True:
+            try:
+                response = self._http_client.request(
+                    "GET",
+                    path,
+                    headers=self.authorization_headers(
+                        force_refresh=token_refreshed,
+                    ),
+                )
+            except requests.RequestException as error:
+                if transient_retries >= self._max_transient_retries:
+                    raise DataPortalRequestError(
+                        f"{endpoint_name} request failed after retries: "
+                        f"{type(error).__name__}"
+                    ) from error
+                self._sleep(self._backoff_seconds(transient_retries, None))
+                transient_retries += 1
+                token_refreshed = False
+                continue
+
+            if response.status_code == 200:
+                return response
+            if response.status_code == 401 and not token_refreshed:
+                token_refreshed = True
+                continue
+            if (
+                response.status_code in TRANSIENT_HTTP_STATUS_CODES
+                and transient_retries < self._max_transient_retries
+            ):
+                self._sleep(self._backoff_seconds(transient_retries, response))
+                transient_retries += 1
+                token_refreshed = False
+                continue
+            self._raise_for_status(response.status_code, endpoint_name)
+
+    def _backoff_seconds(
+        self,
+        retry_number: int,
+        response: requests.Response | None,
+    ) -> float:
+        maximum = min(
+            self._initial_backoff * (2**retry_number),
+            self._max_backoff,
+        )
+        delay = self._random_uniform(0.0, maximum)
+        if response is not None:
+            retry_after = self._parse_retry_after(response.headers.get("Retry-After"))
+            if retry_after is not None:
+                delay = max(delay, retry_after)
+        return delay
+
+    def _parse_retry_after(self, value: str | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return max(0.0, float(value))
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(value)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=UTC)
+            return max(
+                0.0,
+                (retry_at.astimezone(UTC) - self._utcnow().astimezone(UTC)).total_seconds(),
+            )
+
+    @staticmethod
+    def _raise_for_status(status_code: int, endpoint_name: str) -> None:
+        error_types: dict[int, type[DataPortalRequestError]] = {
+            400: DataPortalBadRequestError,
+            401: DataPortalAuthenticationError,
+            403: DataPortalForbiddenError,
+            404: DataPortalNotFoundError,
+            429: DataPortalRateLimitError,
+            500: DataPortalServerError,
+            503: DataPortalServiceUnavailableError,
+        }
+        error_type = error_types.get(status_code, DataPortalRequestError)
+        raise error_type(
+            f"{endpoint_name} endpoint returned HTTP {status_code}",
+            status_code=status_code,
+        )
+
+    @staticmethod
+    def _validate_response_vin(
+        battery_response: dict[str, Any],
+        expected_vin: str,
+    ) -> None:
+        meta = battery_response.get("meta")
+        if not isinstance(meta, dict):
+            raise DataPortalResponseError(
+                "Battery response contains no valid metadata object"
+            )
+
+        response_vins = (meta.get("vin"), battery_response["data"].get("vin"))
+        present_vins = [vin for vin in response_vins if vin is not None]
+        if not present_vins or any(not isinstance(vin, str) for vin in present_vins):
+            raise DataPortalResponseError("Battery response contains no valid VIN")
+        if any(vin.strip().upper() != expected_vin for vin in present_vins):
+            raise DataPortalResponseError(
+                "Battery response VIN does not match the requested vehicle"
+            )
 
     @staticmethod
     def extract_soc(battery_response: dict[str, Any]) -> float:
@@ -360,3 +495,41 @@ class DataPortalClient:
                 "Battery charge level must be between 0 and 100"
             )
         return normalized_soc
+
+    @staticmethod
+    def extract_source_timestamp(
+        battery_response: dict[str, Any],
+    ) -> datetime | None:
+        """Return an optional protobuf telemetry timestamp as UTC datetime."""
+
+        battery_data = battery_response.get("data")
+        if not isinstance(battery_data, dict):
+            raise DataPortalResponseError(
+                "Battery response contains no valid data object"
+            )
+        timestamp = battery_data.get("timestamp")
+        if timestamp is None:
+            return None
+        if not isinstance(timestamp, dict):
+            raise DataPortalResponseError("Battery timestamp must be an object")
+
+        seconds = timestamp.get("seconds")
+        nanos = timestamp.get("nanos", 0)
+        try:
+            parsed_seconds = int(seconds)
+        except (TypeError, ValueError) as error:
+            raise DataPortalResponseError(
+                "Battery timestamp contains invalid seconds"
+            ) from error
+        if isinstance(nanos, bool) or not isinstance(nanos, int) or not 0 <= nanos < 1_000_000_000:
+            raise DataPortalResponseError(
+                "Battery timestamp contains invalid nanoseconds"
+            )
+        try:
+            return datetime.fromtimestamp(parsed_seconds, UTC) + timedelta(
+                microseconds=nanos // 1_000
+            )
+        except (OverflowError, OSError, ValueError) as error:
+            raise DataPortalResponseError(
+                "Battery timestamp is outside the supported range"
+            ) from error

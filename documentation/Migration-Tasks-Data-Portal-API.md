@@ -154,27 +154,52 @@ dieser Lauf rief ausschließlich `POST /token` auf.
 - [x] `GET /v1/vehicles/{vin}/telemetry/battery` implementieren.
 - [x] VIN als Pfadparameter sicher behandeln.
 - [x] `data.batteryChargeLevelPercentage` extrahieren und als numerischen Wert von 0 bis 100 validieren.
-- [ ] Optionale bzw. fehlende Telemetriefelder korrekt behandeln.
-- [ ] Antwort-VIN gegen die konfigurierte VIN validieren.
-- [ ] Quellzeitstempel aus `data.timestamp.seconds` und `nanos` verarbeiten, sofern vorhanden.
-- [ ] Bei `401` genau einmal ein neues Token holen und den Request wiederholen.
-- [ ] `400`, `403`, `404`, `429`, `500` und `503` fachlich unterscheiden.
-- [ ] Exponentielles Backoff mit Jitter für temporäre Fehler vorsehen und `Retry-After` beachten.
-- [ ] Unit-Tests für alle Erfolgs-, Daten- und Fehlerfälle ergänzen.
+- [x] Optionale bzw. fehlende Telemetriefelder korrekt behandeln.
+- [x] Antwort-VIN gegen die konfigurierte VIN validieren.
+- [x] Quellzeitstempel aus `data.timestamp.seconds` und `nanos` verarbeiten, sofern vorhanden.
+- [x] Bei `401` genau einmal ein neues Token holen und den Request wiederholen.
+- [x] `400`, `403`, `404`, `429`, `500` und `503` fachlich unterscheiden.
+- [x] Exponentielles Backoff mit Jitter für temporäre Fehler vorsehen und `Retry-After` beachten.
+- [x] Unit-Tests für alle Erfolgs-, Daten- und Fehlerfälle ergänzen.
 
 **Abnahme:** Eine autorisierte VIN liefert einen validierten SoC; ungültige oder fehlende Daten werden nicht als erfolgreicher Messwert ausgegeben.
+
+**M5-QS-Nachweis vom 17.09.2026:** Ruff und die vollständige automatisierte
+Testsuite liefen mit 138 erfolgreichen Tests durch. Der sichere SoC-Check wurde
+anschließend lokal und mit dem frisch gebauten Container gegen die Data Portal
+API ausgeführt. Beide Läufe bestätigten eine autorisierte VIN und denselben, am
+realen Fahrzeug verifizierten SoC. Credentials, Token, VIN und Messwert werden
+in diesem Nachweis nicht gespeichert.
 
 ## M6 – MQTT- und openWB-Ausgabe migrieren
 
 **Priorität:** Hoch  
 **Abhängigkeiten:** M3, M5
 
-- [ ] Bestehenden kompatiblen SoC-Topic beibehalten:
+- [ ] Erfolgreiche Data-Portal-JSON-Antworten rekursiv in MQTT-Topics auflösen; Objektpfade bilden dabei automatisch die Topic-Struktur.
+- [ ] Neue oder bislang unbekannte Telemetriefelder ohne Codeänderung automatisch publizieren.
+- [ ] Topic-Segmente aus JSON-Schlüsseln deterministisch und MQTT-sicher normalisieren.
+- [ ] Skalare JSON-Werte retained mit QoS 1 publizieren; Objekte und Arrays rekursiv behandeln.
+- [ ] Eine optionale lokale Mapping-Datei für zusätzliche Topics einführen und über `local-files` in den Container einbinden.
+- [ ] Das Mapping ordnet einen JSON-Quellpfad einer Liste aus einem oder mehreren Ziel-Topics zu.
+- [ ] Relative Mapping-Ziele unterhalb von `MQTT_BASE_TOPIC` und ausdrücklich absolute Ziel-Topics unterstützen.
+- [ ] Mapping-Ziele zusätzlich zu den dynamisch erzeugten Topics publizieren; sie dürfen die dynamische Ausgabe weder ersetzen noch unterdrücken.
+- [ ] Fehlende Mapping-Datei als gültige Standardkonfiguration behandeln; ungültige Einträge mit verständlichen, redigierten Meldungen ablehnen.
+- [ ] Eine versionierte Mapping-Beispieldatei bereitstellen.
+- [ ] Die zuletzt erfolgreich publizierte Menge der verwalteten dynamischen und Mapping-Topics in einer lokalen Zustandsdatei außerhalb des Containers persistieren.
+- [ ] Die Zustandsdatei über `local-files` dauerhaft in den Container einbinden und atomar aktualisieren, damit Container-Neustarts die Topic-Historie nicht verlieren.
+- [ ] Nach einem erfolgreichen API-Abruf die zuvor persistierten Topics mit der aktuell erzeugten Topic-Menge vergleichen.
+- [ ] Nicht mehr erzeugte verwaltete Topics mit einem leeren retained Publish (Zero-Length-Payload) und QoS 1 aus dem Broker löschen.
+- [ ] Die neue Topic-Menge erst persistieren, nachdem alle aktuellen Publishes und erforderlichen Lösch-Publishes erfolgreich bestätigt wurden.
+- [ ] Ausschließlich vom Telemetrie-Publisher verwaltete dynamische und Mapping-Topics löschen; Containerstatus-, Credential- und fremde Topics niemals aus dem Inventar ableiten oder entfernen.
+- [ ] Den Namespace `<base>/container/+` als stabile, separat verwaltete Betriebs- und Statusschnittstelle beibehalten; ihn weder dynamisch aus API-JSON erzeugen noch in das persistierte Telemetrie-Topic-Inventar aufnehmen.
+- [ ] Mapping-Ziele unterhalb von `<base>/container/+` ablehnen, damit lokale Mappings die Betriebs- und Statusschnittstelle nicht überschreiben können.
+- [ ] Den bisherigen kompatiblen SoC-Topic über die Mapping-Schicht als zusätzliche Ausgabe ermöglichen:
   - [ ] `<base>/carTelematics/battery/batteryChargeLevelPercentage`
-- [ ] SoC retained mit QoS 1 publizieren.
 - [ ] Bestehendes LWT unter `<base>/container/connected` beibehalten.
 - [ ] `<base>/container/last_update` nur nach erfolgreichem Battery-Abruf aktualisieren.
 - [ ] Redigierten Fehlerstatus unter `<base>/container/last_error` bereitstellen.
+- [ ] Bestehendes `<base>/container/last_exception` beibehalten und ausschließlich redigierte technische Fehlerinformationen publizieren.
 - [ ] Quellzeitstempel optional unter `<base>/carTelematics/battery/sourceTimestamp` publizieren.
 - [ ] Credential-Überwachung retained publizieren:
   - [ ] `<base>/container/credentials/client_secret_expires_at`
@@ -182,9 +207,16 @@ dieser Lauf rief ausschließlich `POST /token` auf.
   - [ ] `<base>/container/credentials/client_secret_status`
 - [ ] Change Detection für SoC beibehalten.
 - [ ] openWB nur mit vorhandenem, validiertem SoC aktualisieren.
-- [ ] Tests mit gemocktem MQTT-Client für Topics, Payload, QoS und Retain ergänzen.
+- [ ] Tests mit gemocktem MQTT-Client für rekursive dynamische Topics, neue JSON-Felder, Mapping auf mehrere Ziele, fehlende und ungültige Mapping-Dateien, persistiertes Topic-Inventar, verwaiste retained Topics, Payload, QoS und Retain ergänzen.
 
-**Abnahme:** Bestehende Node-RED- und openWB-Verbraucher erhalten weiterhin denselben SoC, ohne ihre Topic-Konfiguration ändern zu müssen.
+**Abnahme:** Die MQTT-Ausgabe bildet die gelieferte JSON-Struktur ohne fest codierte
+Telemetriefeldliste dynamisch ab. Lokale Mappings können denselben Quellwert in
+mehrere zusätzliche Topics schreiben und damit bestehende Node-RED-, openWB-
+oder andere Zielsysteme versorgen, ohne die dynamischen Standard-Topics zu
+verändern. Nach Container-Neustarts werden nicht mehr erzeugte, zuvor vom
+Telemetrie-Publisher verwaltete retained Topics zuverlässig aus dem Broker
+entfernt. Die bestehende `<base>/container/+`-Schnittstelle bleibt stabil und
+wird gezielt um neue Betriebsfunktionen wie den Credential-Status ergänzt.
 
 ## M7 – Polling, Fehlerbehandlung und Shutdown überarbeiten
 
