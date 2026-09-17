@@ -121,6 +121,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env_local
 .venv
 env/
 venv/
@@ -160,3 +161,4 @@ cython_debug/
 #.idea/
 docker-compose.yml
 .DS_Store
+local-files/graphql_queries.py

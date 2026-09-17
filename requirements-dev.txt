@@ -1,0 +1,4 @@
+-r src/requirements.txt
+pytest
+requests-mock
+ruff

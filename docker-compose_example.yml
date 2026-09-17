@@ -10,8 +10,10 @@
 # Get it up and running:
 # - install docker
 # - download and rename this file to 'docker-compose.yml' (remove '_example')
+# - create a '.env' file for your Polestar credentials and MQTT login if needed
 # - edit values under 'environment:' to match your needs
-# - no volumes or network needed
+# - optionally customize local-files/graphql_queries.py based on the sample file
+# - no additional network needed
 # - start container with 'docker compose up'
 
 #version: '3.8' (deprecated)
@@ -24,24 +26,19 @@ services:
     restart: always
     environment:
       # Credentials for Polestar Data Portal API (https://data-portal.polestar.com/de/api-credentials/docs)
-      #
-      # see the "API Documentation" tab
-      POLESTAR_ACCOUNT_ID:               "12345678-1234-1234-1234-123456789abc"
-      # generate in the "API Credential" tab
-      POLESTAR_CLIENT_ID:                "your-client-id"
-      POLESTAR_CLIENT_SECRET:            "your-client-secret"
-      # copy "Expires on YYYY-MM-DD (90 days)" from the "API Credential" tab
-      POLESTAR_CLIENT_SECRET_EXPIRES_AT: "2099-12-31"
-      # VIN of the vehicle (one container per vehicle with its own VIN)
-      POLESTAR_VIN:                      "LPSVS000000000000"
+      POLESTAR_ACCOUNT_ID:               "${POLESTAR_ACCOUNT_ID}"
+      POLESTAR_CLIENT_ID:                "${POLESTAR_CLIENT_ID}"
+      POLESTAR_CLIENT_SECRET:            "${POLESTAR_CLIENT_SECRET}"
+      POLESTAR_CLIENT_SECRET_EXPIRES_AT: "${POLESTAR_CLIENT_SECRET_EXPIRES_AT}"
+      POLESTAR_VIN:                      "${POLESTAR_VIN}"
 
       # standard configuration
       TZ:                "Europe/Berlin"
       POLESTAR_CYCLE:    270 # seconds
       MQTT_BROKER:       "192.168.1.100" # IP or DNS name
       MQTT_PORT:         "1883"
-      MQTT_USER:         "" # has to be empty ("") if broker has no password
-      MQTT_PASSWORD:     "" # has to be empty ("") if broker has no password
+      MQTT_USER:         "${MQTT_USER}" # keep empty in .env if broker has no login
+      MQTT_PASSWORD:     "${MQTT_PASSWORD}" # keep empty in .env if broker has no password
       MQTT_BASE_TOPIC:   "polestar2"
 
       # optional SoC forwarding to OpenWB v1 (e.g. if no NodeRed installation is available)
@@ -49,7 +46,8 @@ services:
       #OPENWB_PUBLISH:  True
       #OPENWB_PORT:     1883 # default 1883 if unset
       #OPENWB_LP_NUM:   1 # optional: defaults to 1, change for other LP
-
+    volumes:
+      - ./local-files:/local-files
     labels:
       # automatic update using Watchtower (https://github.com/containrrr/watchtower) highly recommended
       - "com.centurylinklabs.watchtower.enable=true"

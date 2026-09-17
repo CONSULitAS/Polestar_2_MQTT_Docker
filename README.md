@@ -13,18 +13,130 @@ Heads up: This is work in progress, but now usable.
 * Pull requests welcome!
 * Issues welcome!
 
-Get it up and running:
-* install Docker (https://docs.docker.com/engine/install/)
-* download `docker-compose_example.yml`
-* rename it to `docker-compose.yml` (remove `_example`)
-* edit values under `environment:` in the `docker-compose.yml` to match your needs
-* no volumes or network needed
-* start container with `docker compose up` or `docker compose up -d` for background processing 
+## Configuration files
+
+This project now uses two local env files:
+
+* `.env`: shared credentials and sensitive values for Docker Compose and `run_local.sh`
+* `.env_local`: local runtime values used by `run_local.sh`
+
+Both files are ignored by git. Versionable templates are provided as `.env.example` and `.env_local.example`.
+
+### `.env`
+
+Used by:
+* `docker compose`
+* `./run_local.sh`
+
+Typical content:
+
+```env
+POLESTAR_EMAIL="you@example.com"
+POLESTAR_PASSWORD="your-polestar-password"
+POLESTAR_VIN="your-vin-without-spaces"
+MQTT_USER=""
+MQTT_PASSWORD=""
+```
+
+Notes:
+* keep `MQTT_USER` and `MQTT_PASSWORD` empty if your broker has no login
+* `POLESTAR_VIN` must not contain spaces
+
+### `.env_local`
+
+Used by:
+* `./run_local.sh`
+
+Typical content:
+
+```env
+TZ="Europe/Berlin"
+POLESTAR_CYCLE="270"
+MQTT_BROKER="mqtt.example.local"
+MQTT_PORT="1883"
+MQTT_BASE_TOPIC="polestar2"
+OPENWB_HOST="openwb.example.local"
+OPENWB_PUBLISH="True"
+OPENWB_PORT="1883"
+OPENWB_LP_NUM="1"
+```
+
+Notes:
+* this file is only needed for local non-container execution
+* adjust `OPENWB_*` values only if you want direct forwarding to OpenWB v1
+
+## GraphQL overrides
+
+The container now mounts `./local-files` to `/local-files`.
+
+If `/local-files/graphql_queries.py` exists inside the container, the app prefers that file over the built-in [src/graphql_queries.py](/home/hi345gr/Docker/Polestar_2_MQTT_Docker/src/graphql_queries.py). This lets you customize GraphQL queries without modifying the shipped source code.
+
+Included template:
+* [local-files/graphql_queries.py_sample](/home/hi345gr/Docker/Polestar_2_MQTT_Docker/local-files/graphql_queries.py_sample)
+
+Usage:
+1. copy `local-files/graphql_queries.py_sample` to `local-files/graphql_queries.py`
+2. adjust the queries or payload builders as needed
+3. restart the container
+
+Keep the function names `build_getconsumercarsv2_payload()` and `build_cartelematicsv2_payload(vin)` unchanged, because the main program imports exactly these names.
+
+## Docker startup
+
+1. install Docker: https://docs.docker.com/engine/install/
+2. download `docker-compose_example.yml`
+3. rename it to `docker-compose.yml` (remove `_example`)
+4. create `.env` from `.env.example`
+5. optionally create `local-files/graphql_queries.py` from `local-files/graphql_queries.py_sample`
+6. edit the remaining values under `environment:` in `docker-compose.yml`
+7. start the container with `docker compose up` or `docker compose up -d`
+
+The compose setup mounts `./local-files` into the container automatically.
+
+## Local startup
+
+1. create `.env` from `.env.example`
+2. create `.env_local` from `.env_local.example`
+3. adjust both files to your environment
+4. run `./run_local.sh`
+
+`run_local.sh` creates `.venv` if needed, installs Python dependencies, and then starts the app locally.
+
+For a single polling cycle without the endless loop, use:
+
+```bash
+./run_local.sh runonce
+```
+
+This is mainly intended for a local end-to-end check.
+
+## Unit tests
+
+Unit tests are based on `pytest` and mock all external dependencies such as the Polestar API and MQTT brokers.
+
+Quick start:
+1. run `./run_tests.sh`
+
+This script creates or reuses `.venv`, installs the test dependencies from `requirements-dev.txt`, runs `pytest`, and then starts a local end-to-end check with `./run_local.sh runonce` when `.env` and `.env_local` are available.
+If one of these files is missing, the end-to-end step is skipped with a clear message.
+
+You can also call pytest directly:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest
+```
+
+Current focus of the test suite:
+* auth and token handling in `src/auth.py`
+* GraphQL payload builders in `src/graphql_queries.py`
+* MQTT publishing helpers and API response parsing in `src/Polestar_2_MQTT.py`
 
 Discussions (in german ) here:
 https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
 
 ## direct forwarding to OpenWB v1:
-* set `OPENWB_HOST:	 "ip/dns name of openWB"`
-* set `OPENWB_PUBLISH:	 True`
+* set `OPENWB_HOST:    "ip/dns name of openWB"`
+* set `OPENWB_PUBLISH: True`
 * optionally set `OPENWB_PORT` and `OPENWB_LP_NUM` - if not set it defaults to port 1883 and 1 (which results in topic `openWB/set/lp/1/%Soc`)

@@ -1,6 +1,0 @@
-# Development and test dependencies
--r requirements.txt
-
-pytest
-requests-mock
-
