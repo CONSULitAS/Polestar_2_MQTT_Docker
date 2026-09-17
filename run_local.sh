@@ -8,6 +8,7 @@ VENV_DIR="${SCRIPT_DIR}/.venv"
 REQUIREMENTS_FILE="${SCRIPT_DIR}/src/requirements.txt"
 APP_FILE="${SCRIPT_DIR}/src/Polestar_2_MQTT.py"
 AUTH_CHECK_MODULE="polestar_mqtt.auth_check"
+SOC_CHECK_MODULE="polestar_mqtt.soc_check"
 ENV_FILE="${SCRIPT_DIR}/.env"
 ENV_LOCAL_FILE="${SCRIPT_DIR}/.env_local"
 VENV_PYTHON="${VENV_DIR}/bin/python"
@@ -34,18 +35,18 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 fi
 
 if (( ${#APP_ARGS[@]} > 1 )); then
-    echo "Usage: ./run_local.sh [runonce|auth-check]" >&2
+    echo "Usage: ./run_local.sh [runonce|auth-check|soc-check]" >&2
     exit 1
 fi
 
 RUN_MODE="${APP_ARGS[0]:-run}"
-if [[ "${RUN_MODE}" != "run" && "${RUN_MODE}" != "runonce" && "${RUN_MODE}" != "auth-check" ]]; then
+if [[ "${RUN_MODE}" != "run" && "${RUN_MODE}" != "runonce" && "${RUN_MODE}" != "auth-check" && "${RUN_MODE}" != "soc-check" ]]; then
     echo "Unsupported argument: ${APP_ARGS[0]}" >&2
-    echo "Usage: ./run_local.sh [runonce|auth-check]" >&2
+    echo "Usage: ./run_local.sh [runonce|auth-check|soc-check]" >&2
     exit 1
 fi
 
-if [[ "${RUN_MODE}" != "auth-check" && ! -f "${ENV_LOCAL_FILE}" ]]; then
+if [[ "${RUN_MODE}" != "auth-check" && "${RUN_MODE}" != "soc-check" && ! -f "${ENV_LOCAL_FILE}" ]]; then
     echo "Missing ${ENV_LOCAL_FILE}. Create it with the local runtime values from docker-compose.yml." >&2
     exit 1
 fi
@@ -100,6 +101,12 @@ if [[ "${RUN_MODE}" == "auth-check" ]]; then
     export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
     echo "Starting authentication-only Data Portal check"
     exec "${VENV_PYTHON}" -m "${AUTH_CHECK_MODULE}"
+fi
+
+if [[ "${RUN_MODE}" == "soc-check" ]]; then
+    export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+    echo "Starting one-time Data Portal SoC check"
+    exec "${VENV_PYTHON}" -m "${SOC_CHECK_MODULE}"
 fi
 
 # These variables must be set and non-empty for a local run.

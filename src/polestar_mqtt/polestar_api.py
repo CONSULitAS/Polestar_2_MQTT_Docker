@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Callable
+from urllib.parse import quote
 
 import requests
 
-from polestar_mqtt.config import redact_sensitive_text
+from polestar_mqtt.config import VIN_PATTERN, redact_sensitive_text
 
 
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
@@ -32,6 +34,22 @@ class TokenRequestError(TokenProviderError):
 
 class TokenResponseError(TokenProviderError):
     """Raised when a successful response does not match the token contract."""
+
+
+class DataPortalRequestError(RuntimeError):
+    """Raised when a Data Portal business request is rejected."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class DataPortalResponseError(RuntimeError):
+    """Raised when a Data Portal response violates its documented contract."""
+
+
+class VehicleNotAuthorizedError(DataPortalRequestError):
+    """Raised when the configured VIN is absent from the account binding."""
 
 
 @dataclass(frozen=True)
@@ -207,3 +225,138 @@ class TokenProvider:
         if not isinstance(payload, dict):
             raise TokenResponseError("Token endpoint returned a non-object JSON response")
         return payload
+
+
+class DataPortalClient:
+    """Authorized client for official Data Portal business endpoints."""
+
+    def __init__(
+        self,
+        http_client: DataPortalHttpClient,
+        token_provider: TokenProvider,
+        account_id: str,
+    ) -> None:
+        if not account_id.strip():
+            raise ValueError("account_id must not be empty")
+        self._http_client = http_client
+        self._token_provider = token_provider
+        self._account_id = account_id.strip()
+
+    def authorization_headers(self) -> dict[str, str]:
+        """Build the required headers without persisting them on the session."""
+
+        token = self._token_provider.get_token()
+        return {
+            "Accept": "application/json",
+            "Authorization": f"{token.token_type} {token.value}",
+            "x-client-id": self._account_id,
+        }
+
+    def list_vehicles(self) -> list[str]:
+        """Return the VINs authorized for the configured account binding."""
+
+        try:
+            response = self._http_client.request(
+                "GET",
+                "/v1/vehicles",
+                headers=self.authorization_headers(),
+            )
+        except requests.RequestException as error:
+            raise DataPortalRequestError(
+                f"Vehicle list request failed: {type(error).__name__}"
+            ) from error
+
+        if response.status_code != 200:
+            raise DataPortalRequestError(
+                f"Vehicle list endpoint returned HTTP {response.status_code}",
+                status_code=response.status_code,
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise DataPortalResponseError(
+                "Vehicle list endpoint returned invalid JSON"
+            ) from error
+        if not isinstance(payload, dict):
+            raise DataPortalResponseError(
+                "Vehicle list endpoint returned a non-object JSON response"
+            )
+
+        vehicles = payload.get("data")
+        if not isinstance(vehicles, list) or any(
+            not isinstance(vin, str) or not vin for vin in vehicles
+        ):
+            raise DataPortalResponseError(
+                "Vehicle list response contains no valid data array"
+            )
+        return vehicles
+
+    def ensure_vehicle_authorized(self, vin: str) -> None:
+        """Ensure the configured VIN belongs to the authenticated account."""
+
+        normalized_vin = vin.strip().upper()
+        if not normalized_vin:
+            raise ValueError("vin must not be empty")
+        authorized_vins = {value.upper() for value in self.list_vehicles()}
+        if normalized_vin not in authorized_vins:
+            raise VehicleNotAuthorizedError(
+                "Configured VIN is not authorized for the Data Portal account"
+            )
+
+    def get_battery(self, vin: str) -> dict[str, Any]:
+        """Fetch the official Battery telemetry response for one vehicle."""
+
+        normalized_vin = vin.strip().upper()
+        if not VIN_PATTERN.fullmatch(normalized_vin):
+            raise ValueError("vin must be a valid 17-character VIN")
+        encoded_vin = quote(normalized_vin, safe="")
+        try:
+            response = self._http_client.request(
+                "GET",
+                f"/v1/vehicles/{encoded_vin}/telemetry/battery",
+                headers=self.authorization_headers(),
+            )
+        except requests.RequestException as error:
+            raise DataPortalRequestError(
+                f"Battery request failed: {type(error).__name__}"
+            ) from error
+
+        if response.status_code != 200:
+            raise DataPortalRequestError(
+                f"Battery endpoint returned HTTP {response.status_code}",
+                status_code=response.status_code,
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise DataPortalResponseError(
+                "Battery endpoint returned invalid JSON"
+            ) from error
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
+            raise DataPortalResponseError(
+                "Battery endpoint returned no valid data object"
+            )
+        return payload
+
+    @staticmethod
+    def extract_soc(battery_response: dict[str, Any]) -> float:
+        """Extract a finite State of Charge percentage in the range 0..100."""
+
+        battery_data = battery_response.get("data")
+        if not isinstance(battery_data, dict):
+            raise DataPortalResponseError(
+                "Battery response contains no valid data object"
+            )
+        soc = battery_data.get("batteryChargeLevelPercentage")
+        if isinstance(soc, bool) or not isinstance(soc, (int, float)):
+            raise DataPortalResponseError(
+                "Battery response contains no numeric charge level"
+            )
+        normalized_soc = float(soc)
+        if not math.isfinite(normalized_soc) or not 0 <= normalized_soc <= 100:
+            raise DataPortalResponseError(
+                "Battery charge level must be between 0 and 100"
+            )
+        return normalized_soc

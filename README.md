@@ -147,6 +147,15 @@ This mode only requests an OAuth token. It does not start the legacy application
 connect to vehicle, telemetry, MQTT, or openWB endpoints. `./run_auth_check.sh` remains available
 as a convenience wrapper for the same mode.
 
+For a one-time live quality check of vehicle authorization and Battery SoC, use:
+
+```bash
+./run_soc_check.sh
+```
+
+This mode prints only the validated SoC percentage; credentials, VIN, token, and other vehicle
+data are not printed.
+
 ## Unit tests
 
 Unit tests are based on `pytest` and mock all external dependencies such as the Polestar API and MQTT brokers.

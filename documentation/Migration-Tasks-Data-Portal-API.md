@@ -148,12 +148,12 @@ dieser Lauf rief ausschließlich `POST /token` auf.
 **Priorität:** Hoch  
 **Abhängigkeiten:** M4A
 
-- [ ] Gemeinsame Header mit Bearer Token, `x-client-id` und `Accept: application/json` erzeugen.
-- [ ] `GET /v1/vehicles` implementieren.
-- [ ] Konfigurierte VIN gegen die autorisierte Fahrzeugliste prüfen.
-- [ ] `GET /v1/vehicles/{vin}/telemetry/battery` implementieren.
-- [ ] VIN als Pfadparameter sicher behandeln.
-- [ ] `data.batteryChargeLevelPercentage` extrahieren und als numerischen Wert von 0 bis 100 validieren.
+- [x] Gemeinsame Header mit Bearer Token, `x-client-id` und `Accept: application/json` erzeugen.
+- [x] `GET /v1/vehicles` implementieren.
+- [x] Konfigurierte VIN gegen die autorisierte Fahrzeugliste prüfen.
+- [x] `GET /v1/vehicles/{vin}/telemetry/battery` implementieren.
+- [x] VIN als Pfadparameter sicher behandeln.
+- [x] `data.batteryChargeLevelPercentage` extrahieren und als numerischen Wert von 0 bis 100 validieren.
 - [ ] Optionale bzw. fehlende Telemetriefelder korrekt behandeln.
 - [ ] Antwort-VIN gegen die konfigurierte VIN validieren.
 - [ ] Quellzeitstempel aus `data.timestamp.seconds` und `nanos` verarbeiten, sofern vorhanden.
