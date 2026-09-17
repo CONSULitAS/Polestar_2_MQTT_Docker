@@ -12,6 +12,8 @@ from polestar_mqtt.config import DataPortalConfig
 from polestar_mqtt.polestar_api import DataPortalClient, DataPortalHttpClient, TokenProvider
 from polestar_mqtt.publisher import load_topic_mapping, publish_json_topics, validate_publish_topic
 
+from polestar_mqtt.topic_inventory import save_topic_inventory
+
 
 MQTT_TIMEOUT_SECONDS = 30.0
 
@@ -80,6 +82,7 @@ def run_once(config: DataPortalConfig) -> int:
         if not accepted:
             raise MqttRunError("MQTT connection rejected")
         topics = publish_json_topics(ConfirmedPublisher(client), root, battery, mapping=mapping)
+        save_topic_inventory(config.mqtt_topic_state_file, topics)
         return len(topics)
     finally:
         try:

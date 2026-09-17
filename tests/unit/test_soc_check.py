@@ -25,6 +25,7 @@ def run_setup(monkeypatch, requests_mock, tmp_path):
         "MQTT_USER": "fixture-user",
         "MQTT_PASSWORD": "fixture-password",
         "MQTT_TOPIC_MAPPING_FILE": str(tmp_path / "mapping.csv"),
+        "MQTT_TOPIC_STATE_FILE": str(tmp_path / "state.json"),
     }.items():
         monkeypatch.setenv(name, value)
     requests_mock.post(f"{DEFAULT_POLESTAR_API_BASE_URL}/token", json={
@@ -131,3 +132,36 @@ def test_invalid_configuration_does_not_connect(run_setup, monkeypatch) -> None:
     monkeypatch.setenv("MQTT_PORT", "not-a-number")
     assert main() == 2
     factory.assert_not_called()
+
+
+def test_inventory_contains_dynamic_and_mapping_topics_only(run_setup, tmp_path) -> None:
+    client, _, _, _ = run_setup
+    (tmp_path / "mapping.csv").write_text(
+        "source_path,target_topic\ndata.batteryChargeLevelPercentage,extra/soc\n",
+        encoding="utf-8",
+    )
+    assert main() == 0
+    inventory = json.loads((tmp_path / "state.json").read_text())
+    assert inventory == {
+        "version": 1,
+        "topics": sorted(call.args[0] for call in client.publish.call_args_list),
+    }
+    assert len(inventory["topics"]) == 5
+
+
+def test_partial_publication_preserves_previous_inventory(run_setup, tmp_path) -> None:
+    _, info, _, _ = run_setup
+    state = tmp_path / "state.json"
+    previous = '{"version":1,"topics":["old/topic"]}'
+    state.write_text(previous)
+    info.is_published.side_effect = [True, False]
+    assert main() == 1
+    assert state.read_text() == previous
+
+
+def test_inventory_write_failure_fails_run_and_disconnects(run_setup, monkeypatch, tmp_path):
+    client, _, _, _ = run_setup
+    monkeypatch.setenv("MQTT_TOPIC_STATE_FILE", str(tmp_path / "missing" / "state.json"))
+    assert main() == 1
+    client.disconnect.assert_called_once()
+    client.loop_stop.assert_called_once()

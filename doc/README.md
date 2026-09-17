@@ -5,6 +5,8 @@ Dieser Ordner enthält die technische Projektdokumentation ergänzend zur `READM
 ## Inhalte
 - `architecture.md`: Systemaufbau, Datenfluss und Komponenten
 - `operations.md`: Betrieb, Konfiguration und Troubleshooting
+- [Data-Portal-Datenzustände](data-portal-data-states.md): Zielregeln für Fehler,
+  Teilantworten, Quellzeit und retained Werte; mit Abgrenzung zum aktuellen Code
 
 ## Zielgruppe
 - Betreiber des Docker-Containers
@@ -66,6 +68,44 @@ Die Regeln zur Behandlung ungültiger oder veralteter Daten und zur späteren
 Bereinigung retained gespeicherter Topics werden in separaten Schritten ergänzt.
 
 ## Data-Portal-Mapping: JSON-Pfad zu zusätzlichem MQTT-Topic
+
+Die optionale Vorlage [`mqtt_topic_mapping.csv_sample`](../local-files/mqtt_topic_mapping.csv_sample)
+enthält SoC, Ladestatus, geschätzte Restladezeit in Minuten und geschätzte
+Restreichweite in Kilometern. Sie wird nicht automatisch geladen. Zur Aktivierung
+eine lokale Kopie als `local-files/mqtt_topic_mapping.csv` anlegen und anpassen;
+diese aktive Datei ist von Git ausgeschlossen. Eine vorhandene lokale Datei
+dabei nicht überschreiben. Die Vorlage enthält fünf Zuordnungen für vier Werte:
+
+| JSON-Quelle | Zusätzliches MQTT-Ziel |
+| --- | --- |
+| `data.batteryChargeLevelPercentage` | `<MQTT_BASE_TOPIC>/mappingtest/SoC` |
+| `data.chargingStatusV2` | `<MQTT_BASE_TOPIC>/mappingtest/ChargingStatus` |
+| `data.estimatedChargingTimeToFullMinutes` | `<MQTT_BASE_TOPIC>/mappingtest/estimatedChargingTimeToFullMinutes` |
+| `data.estimatedDistanceToEmptyKm` | `<MQTT_BASE_TOPIC>/mappingtest/estimatedDistanceToEmptyKm` |
+| `data.batteryChargeLevelPercentage` | `polestar2-test-DataPortalAPI_absolute/SoC` |
+
+Die beiden SoC-Zuordnungen zeigen die Mehrfachausgabe desselben JSON-Werts.
+Das mit `absolute:` angegebene Ziel erhält kein Basis-Präfix und bleibt auch
+bei einer Änderung von `MQTT_BASE_TOPIC` gleich. Beide Zielarten werden am
+konfigurierten MQTT-Broker publiziert; die dynamischen Topics bleiben erhalten.
+
+Die Vorlage ist eine Übergangs- und Testhilfe, keine Zusage für die Kompatibilität
+mit bisherigen Verbrauchern. Legacy-Felder, die die Data-Portal-Antwort nicht
+liefert, werden weder nachgebildet noch aus anderen Werten geschätzt. Ein Mapping
+ändert nur das Ausgabeziel; es rechnet keine Einheiten um und übersetzt keine
+Statuswerte. Fehlt ein Quellfeld, entsteht daraus keine zusätzliche Veröffentlichung.
+
+Vor der Aktivierung müssen Anwender für ihre Node-RED-Flows, Dashboards oder
+anderen Verbraucher den tatsächlichen JSON-Quellpfad, das Zieltopic, den
+Payload-Typ, die Einheit und die Bedeutung von Statuswerten prüfen. Die
+`mappingtest/`-Ziele und das absolute SoC-Testziel sind Beispiele und bei Bedarf
+an die eigene Installation anzupassen.
+
+Ohne Datei am konfigurierten Mapping-Pfad werden ausschließlich die dynamischen
+Telemetrie-Topics ausgegeben. Die `.csv_sample`-Datei aktiviert keine Zuordnung.
+Das Entfernen der aktiven Datei beendet zusätzliche Veröffentlichungen, löscht
+aber keine bereits beim Broker gespeicherten retained Werte; die automatische
+Bereinigung wird in einem späteren Migrationsschritt umgesetzt.
 
 `source_path` bezeichnet einen Pfad im ursprünglichen JSON in Punktnotation,
 kein MQTT-Topic. Beispielsweise ordnet diese CSV-Zeile den Wert `77` aus
@@ -136,8 +176,29 @@ dauerhafte Programmsteuerung folgt in einem späteren Schritt.
 Fehlende Quellpfade sowie Objekt- oder Array-Werte erzeugen keine zusätzliche
 Ausgabe. Vorhandene skalare Werte verwenden dieselbe Serialisierung wie die
 dynamische Ausgabe, einschließlich `0`, `false`, leerer Strings und `null`.
-Mapping-Ziele dürfen keine dynamischen Topics oder Ziele anderer Quellen
-überschreiben; solche Konflikte werden vor dem ersten Publish abgelehnt.
+Vor dem ersten Publish werden sämtliche erzeugten dynamischen Topics und alle
+konfigurierten Mapping-Ziele geprüft, auch wenn ein Quellfeld gerade fehlt oder
+keinen skalaren Wert enthält. Namen müssen nicht leer, als UTF-8 kodierbar und
+höchstens 65.535 UTF-8-Bytes lang sein; NUL, `+` und `#` sind unzulässig.
+Die Längengrenze gilt für den vollständigen Namen einschließlich Basis und
+prozentkodierter JSON-Segmente. Grundlage sind die verbindlichen Namensregeln
+in [MQTT 3.1.1, Abschnitte 1.5.3 und 4.7](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).
+Broker-spezifische Rechte und weitere Einschränkungen werden dadurch nicht geprüft.
+
+Mapping-Ziele dürfen keine aktuell erzeugten dynamischen Topics oder Ziele
+anderer JSON-Quellen belegen. Das gilt auch bei gleichen Werten und fehlenden
+Quellfeldern. Identische Quelle-Ziel-Zuordnungen werden nur einmal publiziert,
+auch wenn relative und absolute Angaben denselben Zielnamen ergeben.
+Kollisionen zwischen Mapping-Zielen werden bereits nach der Zielauflösung
+geprüft; der Abgleich mit dem dynamischen Baum erfolgt beim Publisher.
+Ein ungültiges Ziel oder ein Konflikt verhindert sämtliche Publishes dieses
+Aufrufs. Fehlermeldungen enthalten keine Quellpfade oder Zielnamen.
+
+Aufgelöste Zielnamen werden exakt verglichen: Groß-/Kleinschreibung, Unicode,
+Leerzeichen sowie führende, doppelte oder abschließende Slashes sind signifikant.
+Es gibt keine Pfadbereinigung wie im Dateisystem. Der bereits dokumentierte
+CSV-Leerraumabgleich und die Basis-Auflösung erfolgen davor. Der separate Schutz
+des Container-Statusbereichs bleibt eine eigene Migrationsaufgabe.
 
 Für `MQTT_BASE_TOPIC=polestar2` gelten folgende Regeln:
 

@@ -162,3 +162,6 @@ cython_debug/
 docker-compose.yml
 .DS_Store
 local-files/graphql_queries.py
+local-files/mqtt_topic_mapping.csv
+
+local-files/mqtt_topic_state.json

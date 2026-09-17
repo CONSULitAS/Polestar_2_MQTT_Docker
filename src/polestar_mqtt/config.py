@@ -30,6 +30,7 @@ DEFAULT_MQTT_PORT = 1883
 DEFAULT_MQTT_KEEPALIVE_SECONDS = 60
 DEFAULT_MQTT_BASE_TOPIC = "polestar2"
 DEFAULT_MQTT_TOPIC_MAPPING_FILE = Path("/local-files/mqtt_topic_mapping.csv")
+DEFAULT_MQTT_TOPIC_STATE_FILE = Path("/local-files/mqtt_topic_state.json")
 DEFAULT_OPENWB_HOST = "localhost"
 DEFAULT_OPENWB_PORT = 1883
 DEFAULT_OPENWB_LP_NUM = 1
@@ -98,6 +99,7 @@ class DataPortalConfig:
     mqtt_password: str = field(repr=False)
     mqtt_base_topic: str
     mqtt_topic_mapping_file: Path
+    mqtt_topic_state_file: Path
     openwb_publish: bool
     openwb_host: str
     openwb_port: int
@@ -215,6 +217,9 @@ class DataPortalConfig:
             mqtt_password=mqtt_password,
             mqtt_base_topic=mqtt_base_topic,
             mqtt_topic_mapping_file=mqtt_topic_mapping_file,
+            mqtt_topic_state_file=Path(
+                values.get("MQTT_TOPIC_STATE_FILE", "").strip() or DEFAULT_MQTT_TOPIC_STATE_FILE
+            ),
             openwb_publish=openwb_publish,
             openwb_host=openwb_host,
             openwb_port=openwb_port,

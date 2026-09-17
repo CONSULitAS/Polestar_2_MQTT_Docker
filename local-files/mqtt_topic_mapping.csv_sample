@@ -1,0 +1,6 @@
+source_path,target_topic
+data.batteryChargeLevelPercentage,mappingtest/SoC
+data.chargingStatusV2,mappingtest/ChargingStatus
+data.estimatedChargingTimeToFullMinutes,mappingtest/estimatedChargingTimeToFullMinutes
+data.estimatedDistanceToEmptyKm,mappingtest/estimatedDistanceToEmptyKm
+data.batteryChargeLevelPercentage,absolute:polestar2-test-DataPortalAPI_absolute/SoC

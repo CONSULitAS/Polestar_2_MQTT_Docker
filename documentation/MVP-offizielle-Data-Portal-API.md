@@ -169,7 +169,22 @@ Zusätzlich empfohlen:
 - `<base>/container/credentials/client_secret_status`: `ok`, `warning`, `critical` oder `expired`
 - `<base>/carTelematics/battery/sourceTimestamp`: aus dem Telemetrie-Zeitstempel, sofern vorhanden
 
-Nur tatsächlich vorhandene neue Felder sollten publiziert werden. Ein fehlendes Feld darf nicht als `null` retained werden, solange nicht bewusst entschieden wurde, damit einen alten retained Wert zu löschen.
+Nur tatsächlich vorhandene Felder werden als Nutzwerte publiziert. Fehlende
+Felder werden nicht durch `null` ersetzt. Explizites JSON-`null` wird als Text
+`null` retained übertragen und kennzeichnet einen vorhandenen unbekannten Wert;
+dies löscht keinen retained Wert. Ein leerer String wird als zwei
+Anführungszeichen (`""`) übertragen. Ausschließlich ein separater retained Publish
+mit Zero-Length-Payload entfernt einen bisherigen retained Wert; diese Bereinigung
+wird über das geplante Topic-Inventar gesteuert.
+
+Für dynamische und zusätzliche Mapping-Topics gilt derselbe
+[Payload-Vertrag](../doc/data-portal-data-states.md#payload-vertrag): Zahlen als
+JSON-Zahlentext, Boolean als `true`/`false`, nicht leere Strings ohne zusätzliche
+Anführungszeichen. Das Textformat ist nicht vollständig typerhaltend; Empfänger
+müssen die Bedeutung und den erwarteten Typ des jeweiligen Felds kennen.
+Ein fehlender, ungültiger oder auf `null` gesetzter SoC ist weiterhin kein
+gültiger neuer Messwert. Die [Entscheidungstabelle](../doc/data-portal-data-states.md)
+trennt diese fachliche Prüfung von Serialisierung und retained Bereinigung.
 
 ## Umsetzungsplan
 

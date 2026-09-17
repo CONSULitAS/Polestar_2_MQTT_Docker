@@ -198,11 +198,11 @@ in diesem Nachweis nicht gespeichert.
 - [x] Fehlende Mapping-Datei als gültige Standardkonfiguration behandeln; ungültige Einträge mit verständlichen, redigierten Meldungen ablehnen.
 - [x] Den dynamischen Wurzelpfad und die Behandlung von `data`, `meta` sowie identifizierenden Feldern wie VIN ausdrücklich dokumentieren; daraus die Veröffentlichung unbekannter Telemetriefelder ohne feste Feldliste ableiten.
 - [x] Die festgelegte Punktnotation für JSON-Quellpfade um eindeutige Regeln für Escaping und Array-Indizes vervollständigen und mit CSV-Beispielen dokumentieren; absolute MQTT-Ziele sind bereits durch `absolute:` gekennzeichnet.
-- [ ] Alle Ziele vor dem Publizieren auf MQTT-Gültigkeit und Kollisionen prüfen; unterschiedliche Quellen für dasselbe Ziel sowie Kollisionen mit dynamischen Topics ablehnen, identische Zuordnungen deduplizieren.
-- [ ] Eine versionierte, ausschließlich optional zu aktivierende CSV-Mapping-Beispieldatei für die wichtigsten tatsächlich verfügbaren Battery-Werte bereitstellen. Mindestens den SoC beispielhaft auf `carTelematics/battery/batteryChargeLevelPercentage` abbilden; weitere Werte nur bei belegter fachlicher Entsprechung ergänzen.
-- [ ] In der Beispiel-Dokumentation erklären, dass fehlende Legacy-Felder nicht nachgebildet werden und Anwender die Zuordnungen für ihre Verbraucher prüfen müssen. Ohne lokale Mapping-Datei ausschließlich dynamische Telemetrie-Topics ausgeben.
-- [ ] Eine Entscheidungstabelle für Transportfehler, ungültige Antworten, gültige Teilantworten, fehlende Felder, explizites `null` und alte oder fehlende Quellzeitstempel festlegen. Je Fall Veröffentlichung, Beibehalten oder Löschen retained gespeicherter Werte, Statusausgabe und openWB-Verhalten definieren; HTTP 200 allein ist kein gültiger Messwert.
-- [ ] Payload-Regeln für Zahlen, Boolean, leere Strings und `null` dokumentieren und gegen das MVP-Konzept abstimmen; Nutzwerte klar von Zero-Length-Lösch-Payloads unterscheiden.
+- [x] Alle Ziele vor dem Publizieren auf MQTT-Gültigkeit und Kollisionen prüfen; unterschiedliche Quellen für dasselbe Ziel sowie Kollisionen mit dynamischen Topics ablehnen, identische Zuordnungen deduplizieren.
+- [x] Eine versionierte, ausschließlich optional zu aktivierende CSV-Mapping-Beispieldatei für die wichtigsten tatsächlich verfügbaren Battery-Werte bereitstellen. Gemäß Nutzeranpassung relative Testziele unter `mappingtest/` und eine zusätzliche SoC-Ausgabe auf `absolute:polestar2-test-DataPortalAPI_absolute/SoC` zeigen; keine Legacy-Topic-Vorgabe.
+- [x] In der Beispiel-Dokumentation erklären, dass fehlende Legacy-Felder nicht nachgebildet werden und Anwender die Zuordnungen für ihre Verbraucher prüfen müssen. Ohne lokale Mapping-Datei ausschließlich dynamische Telemetrie-Topics ausgeben.
+- [x] Eine Entscheidungstabelle für Transportfehler, ungültige Antworten, gültige Teilantworten, fehlende Felder, explizites `null` und alte oder fehlende Quellzeitstempel festlegen. Je Fall Veröffentlichung, Beibehalten oder Löschen retained gespeicherter Werte, Statusausgabe und openWB-Verhalten definieren; HTTP 200 allein ist kein gültiger Messwert. Siehe [Datenzustände und Ausgabeentscheidungen](../doc/data-portal-data-states.md).
+- [x] Payload-Regeln für Zahlen, Boolean, leere Strings und `null` dokumentieren und gegen das MVP-Konzept abstimmen; Nutzwerte klar von Zero-Length-Lösch-Payloads unterscheiden. Siehe [Payload-Vertrag](../doc/data-portal-data-states.md#payload-vertrag); die missverständliche `null`-Löschregel im MVP-Konzept ist korrigiert.
 
 **QS-Nachweis Zielauflösung vom 17.09.2026:** Auf Basis von Commit `f29fbd9`
 mit lokalen, nicht committeten Änderungen an Konfiguration, Publisher, Tests
@@ -274,6 +274,32 @@ Grenzen stehen in `doc/README.md`. Auf Basis `f29fbd9` mit lokalen Änderungen a
 Publisher, Tests und Dokumentation bestand `./run_tests.sh` mit Ruff, 223 Tests
 und Exit-Code 0. Dieser Schritt betrifft ausschließlich die Mapping-Pfadsyntax;
 es wurde kein Container-Test durchgeführt.
+
+**QS-Nachweis Zielvalidierung vom 17.09.2026:** Alle dynamischen und konfigurierten
+Mapping-Ziele werden vor dem ersten Publish auf nicht leere, gültige UTF-8-Namen,
+maximal 65.535 UTF-8-Bytes und Ausschluss von NUL und Wildcards geprüft. Konflikte
+zwischen unterschiedlichen Quellen oder mit dynamischen Topics werden auch bei
+fehlenden Quellen und gleichen Werten abgelehnt; identische Zuordnungen werden
+dedupliziert. Die vereinfachte Prüfung im Einmallauf nutzt nun denselben Validator.
+Auf Basis `f29fbd9` mit lokalen Änderungen an Publisher, Einmallauf, Tests und
+Dokumentation bestand `./run_tests.sh` mit Ruff, 247 Tests und Exit-Code 0.
+UTF-8-Bytegrenzen, fehlerhafte dynamische Namen, Kollisionen und ausbleibende
+Publishes bei Fehlern sind automatisiert abgedeckt. `git diff --check` erfolgreich.
+Kein Container-Test; der Container-Namespace-Schutz bleibt separat offen.
+
+**QS-Nachweis Beispiel-Mapping vom 17.09.2026:** Die für die Versionierung
+vorgesehene Datei `local-files/mqtt_topic_mapping.csv_sample` enthält vier
+JSON-Pfad-Zuordnungen für SoC, Ladestatus, Restladezeit (Minuten) und Restreichweite
+(Kilometer). Die Felder sind aus der Battery-Ausgabe bekannt und entsprechen den
+bisherigen gleichnamigen Battery-Feldern. Alle Ziele liegen relativ zur
+konfigurierten MQTT-Basis unter `carTelematics/battery`; die Vorlage wird nicht
+automatisch aktiviert. Die aktive lokale CSV ist in `.gitignore` aufgenommen.
+Mit dem vorhandenen Loader und Publisher wurden alle vier Zuordnungen gegen die
+synthetische Battery-Fixture mit synthetisch ergänzter Restladezeit geprüft:
+zusätzliche und dynamische Payloads stimmen überein, QoS 1 und Retain bleiben
+erhalten. Prüfung ohne Netzwerkzugriff mit gemocktem MQTT-Client; keine aktive
+Mapping-Datei angelegt. `git diff --check` erfolgreich. Keine Python-Codeänderung,
+daher kein erneuter vollständiger Test- oder Live-Lauf.
 
 ### M6.2 – Bestätigte Veröffentlichung und dauerhaftes Topic-Inventar
 

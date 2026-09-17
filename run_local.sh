@@ -106,6 +106,7 @@ fi
 if [[ "${RUN_MODE}" == "soc-check" || "${RUN_MODE}" == "runonce-DataPortalAPI" ]]; then
     export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
     export MQTT_TOPIC_MAPPING_FILE="${MQTT_TOPIC_MAPPING_FILE:-${SCRIPT_DIR}/local-files/mqtt_topic_mapping.csv}"
+    export MQTT_TOPIC_STATE_FILE="${MQTT_TOPIC_STATE_FILE:-${SCRIPT_DIR}/local-files/mqtt_topic_state.json}"
     echo "Starting one-time Data Portal read and MQTT publication"
     exec "${VENV_PYTHON}" -m "${DATA_PORTAL_RUNONCE_MODULE}"
 fi
