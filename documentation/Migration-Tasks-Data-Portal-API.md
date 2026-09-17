@@ -2,6 +2,15 @@
 
 Diese Taskliste setzt das [MVP-Konzept](MVP-offizielle-Data-Portal-API.md) für Login und SoC-Abruf um. Die Reihenfolge berücksichtigt technische Abhängigkeiten. M8 liefert den funktionalen End-to-End-Nachweis; abgeschlossen ist die Migration nach der anschließenden Bereinigung in M9.
 
+**QS-Ergänzungen vom 17.09.2026:** Dokumentierte Fortschritte und Nachweise bleiben
+erhalten; ergänzende Prüfungen werden als neue offene Aufgaben geführt. Für die
+Telemetrie gilt die bewusst angepasste Zielsetzung: Topics entstehen dynamisch
+aus der API-Antwort. Eine Rückwärtskompatibilität zu Legacy-Telemetrie-Topics wird
+nicht zugesichert. Ein optionales Beispiel-Mapping erleichtert Anwendern den
+Übergang und wird nicht automatisch aktiviert. Diese Entscheidung ersetzt die
+abweichende Kompatibilitätszusage im bisherigen MVP-Konzept; die separat
+verwaltete Betriebs- und Statusschnittstelle bleibt erhalten.
+
 ## M0 – API-Zugang und Annahmen verifizieren
 
 **Priorität:** Blocker  
@@ -176,47 +185,181 @@ in diesem Nachweis nicht gespeichert.
 **Priorität:** Hoch  
 **Abhängigkeiten:** M3, M5
 
-- [ ] Erfolgreiche Data-Portal-JSON-Antworten rekursiv in MQTT-Topics auflösen; Objektpfade bilden dabei automatisch die Topic-Struktur.
-- [ ] Neue oder bislang unbekannte Telemetriefelder ohne Codeänderung automatisch publizieren.
-- [ ] Topic-Segmente aus JSON-Schlüsseln deterministisch und MQTT-sicher normalisieren.
-- [ ] Skalare JSON-Werte retained mit QoS 1 publizieren; Objekte und Arrays rekursiv behandeln.
-- [ ] Eine optionale lokale Mapping-Datei für zusätzliche Topics einführen und über `local-files` in den Container einbinden.
-- [ ] Das Mapping ordnet einen JSON-Quellpfad einer Liste aus einem oder mehreren Ziel-Topics zu.
-- [ ] Relative Mapping-Ziele unterhalb von `MQTT_BASE_TOPIC` und ausdrücklich absolute Ziel-Topics unterstützen.
-- [ ] Mapping-Ziele zusätzlich zu den dynamisch erzeugten Topics publizieren; sie dürfen die dynamische Ausgabe weder ersetzen noch unterdrücken.
-- [ ] Fehlende Mapping-Datei als gültige Standardkonfiguration behandeln; ungültige Einträge mit verständlichen, redigierten Meldungen ablehnen.
-- [ ] Eine versionierte Mapping-Beispieldatei bereitstellen.
+### M6.1 – Dynamische Topics und Mapping-Vertrag
+
+- [x] Erfolgreiche Data-Portal-JSON-Antworten rekursiv in MQTT-Topics auflösen; Objektpfade bilden dabei automatisch die Topic-Struktur.
+- [x] Neue oder bislang unbekannte Telemetriefelder ohne Codeänderung automatisch publizieren.
+- [x] Topic-Segmente aus JSON-Schlüsseln deterministisch und MQTT-sicher normalisieren.
+- [x] Skalare JSON-Werte retained mit QoS 1 publizieren; Objekte und Arrays rekursiv behandeln.
+- [x] Eine optionale lokale CSV-Mapping-Datei für zusätzliche Topics unter `/local-files/mqtt_topic_mapping.csv` einführen und über `local-files` in den Container einbinden; JSON ist als Mapping-Format ausdrücklich ausgeschlossen.
+- [x] Das CSV-Mapping ordnet über die Spalten `source_path,target_topic` einen JSON-Quellpfad einer Liste aus einem oder mehreren Ziel-Topics zu; mehrere Ziele werden als mehrere Zeilen mit identischem `source_path` eingetragen.
+- [x] Relative Mapping-Ziele unterhalb von `MQTT_BASE_TOPIC` und ausdrücklich absolute Ziel-Topics unterstützen.
+- [x] Werte direkt aus dem ursprünglichen API-JSON über `source_path` in Punktnotation lesen und auf den zusätzlichen MQTT-Zielen publizieren; beispielsweise `carTelematics.battery.soc → absolute:openWB/LP1/SoC` bei entsprechend aufgebautem JSON. Keine MQTT-Topics als Quelle verwenden. Die dynamische Ausgabe darf weder ersetzt noch unterdrückt werden; für die tatsächliche Battery-Antwort lautet der SoC-Quellpfad `data.batteryChargeLevelPercentage`.
+- [x] Fehlende Mapping-Datei als gültige Standardkonfiguration behandeln; ungültige Einträge mit verständlichen, redigierten Meldungen ablehnen.
+- [x] Den dynamischen Wurzelpfad und die Behandlung von `data`, `meta` sowie identifizierenden Feldern wie VIN ausdrücklich dokumentieren; daraus die Veröffentlichung unbekannter Telemetriefelder ohne feste Feldliste ableiten.
+- [x] Die festgelegte Punktnotation für JSON-Quellpfade um eindeutige Regeln für Escaping und Array-Indizes vervollständigen und mit CSV-Beispielen dokumentieren; absolute MQTT-Ziele sind bereits durch `absolute:` gekennzeichnet.
+- [ ] Alle Ziele vor dem Publizieren auf MQTT-Gültigkeit und Kollisionen prüfen; unterschiedliche Quellen für dasselbe Ziel sowie Kollisionen mit dynamischen Topics ablehnen, identische Zuordnungen deduplizieren.
+- [ ] Eine versionierte, ausschließlich optional zu aktivierende CSV-Mapping-Beispieldatei für die wichtigsten tatsächlich verfügbaren Battery-Werte bereitstellen. Mindestens den SoC beispielhaft auf `carTelematics/battery/batteryChargeLevelPercentage` abbilden; weitere Werte nur bei belegter fachlicher Entsprechung ergänzen.
+- [ ] In der Beispiel-Dokumentation erklären, dass fehlende Legacy-Felder nicht nachgebildet werden und Anwender die Zuordnungen für ihre Verbraucher prüfen müssen. Ohne lokale Mapping-Datei ausschließlich dynamische Telemetrie-Topics ausgeben.
+- [ ] Eine Entscheidungstabelle für Transportfehler, ungültige Antworten, gültige Teilantworten, fehlende Felder, explizites `null` und alte oder fehlende Quellzeitstempel festlegen. Je Fall Veröffentlichung, Beibehalten oder Löschen retained gespeicherter Werte, Statusausgabe und openWB-Verhalten definieren; HTTP 200 allein ist kein gültiger Messwert.
+- [ ] Payload-Regeln für Zahlen, Boolean, leere Strings und `null` dokumentieren und gegen das MVP-Konzept abstimmen; Nutzwerte klar von Zero-Length-Lösch-Payloads unterscheiden.
+
+**QS-Nachweis Zielauflösung vom 17.09.2026:** Auf Basis von Commit `f29fbd9`
+mit lokalen, nicht committeten Änderungen an Konfiguration, Publisher, Tests
+und Dokumentation wurde `resolve_topic_mapping()` ergänzt. Relative Ziele werden
+unterhalb der Basis aufgelöst; `absolute:` kennzeichnet ein Ziel ohne Basis-Präfix.
+Die Regeln und Beispiele stehen in [`doc/README.md`](../doc/README.md).
+`./run_tests.sh` lief mit erfolgreichem Ruff-Check, 160 bestandenen Tests und
+Exit-Code 0 durch. Geprüft wurden gemischte relative/absolute CSV-Ziele,
+abschließende Basis-Slashes, explizite führende Topic-Slashes, äquivalente Ziele
+und leere beziehungsweise mehrdeutige Angaben. Der vom Testskript zusätzlich
+gestartete Legacy-E2E-Lauf beendete einen Zyklus; er prüft nicht die neue
+Mapping-Ausgabe und gab vertrauliche Debug-Daten aus, die hier nicht übernommen
+werden. Die eigentliche Mapping-Veröffentlichung bleibt der nächste offene Schritt.
+
+**Präzisierung JSON-Quelle vom 17.09.2026:** Der CSV-Parser akzeptiert jetzt
+JSON-Pfade in Punktnotation. Die Zielauflösung erhält diese Quellpfade unverändert;
+sie löst ausschließlich die MQTT-Zielnamen auf. Das Beispiel
+`carTelematics.battery.soc,absolute:openWB/LP1/SoC` ist durch einen Regressionstest
+abgedeckt. Auf derselben Commit-Basis mit lokalen Änderungen an Parser, Tests und
+Dokumentation lief `./run_tests.sh` mit erfolgreichem Ruff-Check, 166 bestandenen
+Tests und Exit-Code 0 durch. Der zusätzliche Legacy-E2E-Lauf beendete einen Zyklus;
+die direkte JSON-Wertauswertung und zusätzliche Veröffentlichung bleiben offen.
+
+**QS-Nachweis zusätzliche JSON-Ausgabe vom 17.09.2026:** Auf Basis von Commit
+`f29fbd9` mit lokalen Änderungen an Publisher, Tests und Dokumentation publiziert
+`publish_json_topics()` nun zusätzlich die über JSON-Punktpfade zugeordneten
+skalaren Werte. Der Test für `carTelematics.battery.soc` bestätigt die Ausgabe
+auf `openWB/LP1/SoC` und einem relativen Ziel bei unveränderter dynamischer Ausgabe.
+Fehlende oder nicht skalare Quellen unterdrücken keine dynamischen Topics;
+Zielkonflikte werden vor dem ersten Publish abgelehnt. `./run_tests.sh` bestand
+mit Ruff, 179 erfolgreichen Tests und Exit-Code 0. Der zusätzliche Legacy-E2E-Lauf
+beendete einen Zyklus; er ist kein Live-Nachweis der neuen Mapping-Ausgabe.
+Dateiladen, vollständige Pfad-Syntax und Integration in die Programmsteuerung
+bleiben den weiteren Aufgaben vorbehalten.
+
+**QS-Nachweis optionales Dateiladen vom 17.09.2026:** Auf Basis von Commit
+`f29fbd9` mit lokalen Änderungen an Publisher, Tests und Dokumentation wurde
+`load_topic_mapping()` ergänzt. Fehlende Dateien ergeben ein leeres Mapping;
+vorhandene Dateien werden als UTF-8 (optional mit BOM) eingelesen, geprüft und
+aufgelöst. Fehlerhafte Kopfzeilen, zusätzliche oder fehlende Spalten, ungültige
+CSV-Syntax, ungültige Quell-/Zielangaben gemäß bisherigem Vertrag, Encoding- und
+Lesefehler werden ohne Ausgabe von Pfad oder Dateiinhalt abgelehnt. Fehlermeldungen
+für CSV-Zeilen nennen die physische Zeilennummer. Eine reine Kopfzeile ist gültig;
+eine vorhandene leere Datei gilt als Konfigurationsfehler. `./run_tests.sh` bestand
+nach einer selektiven Ruff-Zeilenlängenkorrektur mit Ruff, 194 erfolgreichen Tests
+und Exit-Code 0. Der zusätzliche Legacy-E2E-Lauf beendete einen Zyklus; er prüft
+nicht das neue Dateiladen. Vollständige MQTT-Zielvalidierung, erweiterte Pfad-Syntax
+und Einbindung in die Programmsteuerung bleiben separate Aufgaben.
+
+**Dokumentationsnachweis Topic-Baum vom 17.09.2026:** In
+[`doc/README.md`](../doc/README.md#data-portal-ausgabe-dynamischer-topic-baum)
+ist `<MQTT_BASE_TOPIC>/telemetry/battery` als Battery-Wurzel festgelegt. Die
+vollständige validierte Antwort behält `data` und `meta`; vorhandene VIN- und
+sonstige Identifikationsfelder werden als MQTT-Nutzwerte mitpubliziert, ohne
+eine VIN in der Wurzel einzuführen. Neue skalare Felder werden ohne Feldliste
+rekursiv ergänzt. JSON-Quellpfade des Mappings bleiben unabhängig von der
+MQTT-Wurzel. Die Dokumentation wurde gegen Publisher, vorhandene Unit-Tests
+und synthetische Battery-Fixture abgeglichen; `git diff --check` war erfolgreich.
+Basis: `f29fbd9` mit bestehenden lokalen Änderungen. Dieser Schritt ändert nur
+Dokumentation; keine erneuten Anwendungs- oder Live-Tests. Die Einbindung der
+festgelegten Wurzel in die Programmsteuerung bleibt offen.
+
+**QS-Nachweis Pfad-Syntax vom 17.09.2026:** Punktpfade unterstützen jetzt
+maskierte Punkte (`\.`), Backslashes (`\\`), Slashes (`\/`) und leere Schlüssel
+(`\e`). Numerische Segmente adressieren Arrays ab Index 0 und bleiben bei Objekten
+wörtliche Schlüssel. Parser und Publisher verwenden dieselbe Pfad-Auswertung;
+fehlerhafte Escapes werden vor dem Publizieren abgelehnt. CSV-Beispiele und
+Grenzen stehen in `doc/README.md`. Auf Basis `f29fbd9` mit lokalen Änderungen an
+Publisher, Tests und Dokumentation bestand `./run_tests.sh` mit Ruff, 223 Tests
+und Exit-Code 0. Dieser Schritt betrifft ausschließlich die Mapping-Pfadsyntax;
+es wurde kein Container-Test durchgeführt.
+
+### M6.2 – Bestätigte Veröffentlichung und dauerhaftes Topic-Inventar
+
 - [ ] Die zuletzt erfolgreich publizierte Menge der verwalteten dynamischen und Mapping-Topics in einer lokalen Zustandsdatei außerhalb des Containers persistieren.
 - [ ] Die Zustandsdatei über `local-files` dauerhaft in den Container einbinden und atomar aktualisieren, damit Container-Neustarts die Topic-Historie nicht verlieren.
-- [ ] Nach einem erfolgreichen API-Abruf die zuvor persistierten Topics mit der aktuell erzeugten Topic-Menge vergleichen.
+- [ ] Nach einer fachlich validierten API-Antwort die zuvor persistierten Topics mit der gemäß Entscheidungstabelle aktuell erzeugten Topic-Menge vergleichen; Transportfehler und abgelehnte Antworten dürfen keine Inventarbereinigung auslösen.
 - [ ] Nicht mehr erzeugte verwaltete Topics mit einem leeren retained Publish (Zero-Length-Payload) und QoS 1 aus dem Broker löschen.
-- [ ] Die neue Topic-Menge erst persistieren, nachdem alle aktuellen Publishes und erforderlichen Lösch-Publishes erfolgreich bestätigt wurden.
+- [ ] Vor dem ersten Publish einen ausstehenden Vorgang mit bisheriger und beabsichtigter Topic-Menge dauerhaft speichern. Die neue Topic-Menge erst als abgeschlossen übernehmen, nachdem alle aktuellen Publishes und erforderlichen Lösch-Publishes erfolgreich bestätigt wurden; Wiederaufnahme nach Absturz idempotent gestalten.
+- [ ] Bestätigungen und deren Timeouts ausdrücklich auswerten; ein Aufruf von `publish()` allein gilt nicht als erfolgreiche Zustellung.
+- [ ] Das Inventar versionieren und an Broker sowie Publisher-Instanz binden. Verhalten bei Wechsel von Broker oder `MQTT_BASE_TOPIC`, fehlender oder beschädigter Zustandsdatei und parallelen Instanzen festlegen; bei unklarer Zuständigkeit keine Topics löschen.
+- [ ] Exklusive Zuständigkeit für dynamische und zusätzliche Mapping-Ziele dokumentieren, insbesondere für absolute Ziele außerhalb von `MQTT_BASE_TOPIC`; eine Inventaraufnahme allein begründet kein Eigentum an fremden Topics.
 - [ ] Ausschließlich vom Telemetrie-Publisher verwaltete dynamische und Mapping-Topics löschen; Containerstatus-, Credential- und fremde Topics niemals aus dem Inventar ableiten oder entfernen.
-- [ ] Den Namespace `<base>/container/+` als stabile, separat verwaltete Betriebs- und Statusschnittstelle beibehalten; ihn weder dynamisch aus API-JSON erzeugen noch in das persistierte Telemetrie-Topic-Inventar aufnehmen.
-- [ ] Mapping-Ziele unterhalb von `<base>/container/+` ablehnen, damit lokale Mappings die Betriebs- und Statusschnittstelle nicht überschreiben können.
-- [ ] Den bisherigen kompatiblen SoC-Topic über die Mapping-Schicht als zusätzliche Ausgabe ermöglichen:
-  - [ ] `<base>/carTelematics/battery/batteryChargeLevelPercentage`
+- [ ] `<base>/container` einschließlich aller Unterpfade als stabile, separat verwaltete Betriebs- und Statusschnittstelle schützen (MQTT-Filter `<base>/container/#`); diesen Bereich weder dynamisch aus API-JSON erzeugen noch in das Telemetrie-Topic-Inventar aufnehmen.
+- [ ] Relative und absolute Mapping-Ziele im gesamten geschützten Container-Namespace ablehnen.
+- [ ] Den Umgang mit alten retained GraphQL-Topics dokumentieren: Sie gehören nicht automatisch zum neuen Inventar. Eine gezielte manuelle Bereinigung erläutern; keine pauschale Löschung des bisherigen Topic-Baums vorsehen.
+
+### M6.3 – Betriebsstatus, Change Detection und openWB
+
 - [ ] Bestehendes LWT unter `<base>/container/connected` beibehalten.
-- [ ] `<base>/container/last_update` nur nach erfolgreichem Battery-Abruf aktualisieren.
+- [ ] `<base>/container/last_update` als Zeitpunkt des letzten fachlich erfolgreichen Battery-Abrufs definieren und nur dann aktualisieren. Abrufzeit, Quellzeit und MQTT-Zustellstatus unterscheiden; ein alter Quellzeitstempel darf nicht als neue Messung dargestellt werden.
 - [ ] Redigierten Fehlerstatus unter `<base>/container/last_error` bereitstellen.
 - [ ] Bestehendes `<base>/container/last_exception` beibehalten und ausschließlich redigierte technische Fehlerinformationen publizieren.
-- [ ] Quellzeitstempel optional unter `<base>/carTelematics/battery/sourceTimestamp` publizieren.
+- [ ] Den Quellzeitstempel über die dynamischen Topics zugänglich machen; eine gegebenenfalls zusätzlich aufbereitete Darstellung samt Format und Mapping-Quellpfad ausdrücklich definieren, ohne einen festen Legacy-Telemetrie-Topic vorauszusetzen.
 - [ ] Credential-Überwachung retained publizieren:
   - [ ] `<base>/container/credentials/client_secret_expires_at`
   - [ ] `<base>/container/credentials/client_secret_days_remaining`
   - [ ] `<base>/container/credentials/client_secret_status`
 - [ ] Change Detection für SoC beibehalten.
+- [ ] Nach MQTT-Reconnect aktuelle Telemetrie- und Betriebswerte erneut publizieren, auch bei unverändertem SoC; insbesondere einen Broker-Neustart ohne retained Bestand berücksichtigen.
+- [ ] Credential-Warnungen ab 14 verbleibenden Tagen auch im Fehlerstatus berücksichtigen. Priorität und Rücksetzen von API-, MQTT-, openWB- und Credential-Fehlern festlegen; ein erfolgreicher Battery-Abruf darf eine weiterhin aktive Credential-Warnung nicht löschen.
 - [ ] openWB nur mit vorhandenem, validiertem SoC aktualisieren.
+- [ ] Die optionale openWB-Verbindung und ihre Fehlerbehandlung von der Hauptausgabe trennen; ein openWB-Ausfall darf die Telemetrie-Veröffentlichung am Hauptbroker nicht blockieren. Mapping-Ziele bezeichnen Topics, keine zusätzlichen Brokerverbindungen.
+
+### M6.4 – QS und Abnahme
+
 - [ ] Tests mit gemocktem MQTT-Client für rekursive dynamische Topics, neue JSON-Felder, Mapping auf mehrere Ziele, fehlende und ungültige Mapping-Dateien, persistiertes Topic-Inventar, verwaiste retained Topics, Payload, QoS und Retain ergänzen.
+- [ ] Regressionstests für Zielkollisionen, geschützte Unterpfade, Teilantworten, `null`, veraltete Messwerte, Zustellfehler und beschädigte oder nicht zuordenbare Inventare ergänzen.
+- [ ] Abstürze vor und nach einzelnen Publishes, Löschungen und Inventarabschlüssen testen; nach Neustart dürfen auch bereits zugestellte neue Topics nicht aus der Bereinigung verloren gehen.
+- [ ] Einen getrennten Integrationstest mit lokalem Testbroker für retained Werte, bestätigte Löschungen, Reconnect und Wiederveröffentlichung durchführen; Unit-Tests weiterhin ohne Netzwerkzugriff ausführen.
 
 **Abnahme:** Die MQTT-Ausgabe bildet die gelieferte JSON-Struktur ohne fest codierte
-Telemetriefeldliste dynamisch ab. Lokale Mappings können denselben Quellwert in
+Telemetriefeldliste dynamisch ab. Ohne Mapping-Datei entstehen keine zusätzlichen
+Legacy-Telemetrie-Topics. Das optionale Beispiel-Mapping erleichtert die gezielte
+Umstellung vorhandener Verbraucher, ohne Rückwärtskompatibilität zu garantieren.
+Lokale Mappings können denselben Quellwert in
 mehrere zusätzliche Topics schreiben und damit bestehende Node-RED-, openWB-
 oder andere Zielsysteme versorgen, ohne die dynamischen Standard-Topics zu
 verändern. Nach Container-Neustarts werden nicht mehr erzeugte, zuvor vom
 Telemetrie-Publisher verwaltete retained Topics zuverlässig aus dem Broker
-entfernt. Die bestehende `<base>/container/+`-Schnittstelle bleibt stabil und
+entfernt, auch nach einem Absturz während einer nur teilweise bestätigten
+Veröffentlichung. Fremde und nicht eindeutig zuordenbare Topics bleiben geschützt.
+Die bestehende `<base>/container/#`-Schnittstelle bleibt stabil und
 wird gezielt um neue Betriebsfunktionen wie den Credential-Status ergänzt.
+
+## M6A – Lokaler Data-Portal-Einmallauf mit MQTT-Ausgabe
+
+**Priorität:** Vorgezogener QS-Zwischenschritt auf Nutzerwunsch
+
+**Abhängigkeiten:** M5 und bereits umgesetzte Publisher-/Mapping-Bausteine aus M6
+
+- [x] Den bisherigen `soc-check` zu `./run_local.sh runonce-DataPortalAPI` mit Einstiegspunkt `python -m polestar_mqtt.runonce` refaktorieren; bisherige SoC-Check-Aufrufe als dokumentierte Aliase mit MQTT-Ausgabe erhalten.
+- [x] Einmal authentifizieren, VIN-Berechtigung prüfen und die aktuelle Battery-Antwort einschließlich SoC und optionalem Quellzeitstempel validieren.
+- [x] Die Antwort unter `<MQTT_BASE_TOPIC>/telemetry/battery` dynamisch und zusätzlich über ein optionales JSON-Pfad-Mapping publizieren; lokal die Mapping-Datei im Repository-Verzeichnis `local-files` als Default verwenden.
+- [x] MQTT-Zugangsdaten aus der vorhandenen Konfiguration verwenden; Verbindungsbestätigung und QoS-1-Publish-Bestätigungen mit begrenzter Wartezeit prüfen, danach MQTT-Verbindung und Netzwerkschleife beenden.
+- [x] Nur eine Zusammenfassung ohne Credentials, Token, VIN oder Messwerte ausgeben; Fehler mit Exit-Code ungleich 0 melden.
+- [x] Automatisierte Tests für Erfolg, zusätzliche Mapping-Ausgabe, ungültigen SoC, Konfigurationsfehler, Broker-Ablehnung, Verbindungs-/Publish-Fehler und ausbleibende Bestätigungen ausführen.
+- [x] Den Einmallauf lokal mit echten Credentials und konfiguriertem MQTT-Testtopic ausführen.
+
+**Abnahme:** Ein lokaler Aufruf liest die aktuelle Data-Portal-Antwort und endet
+mit Exit-Code 0 erst nach Bestätigung sämtlicher MQTT-Publishes. Dieser
+Zwischenschritt ersetzt weder die vollständige M6-Abnahme noch M7/M8.
+Container-Test ausdrücklich auf Nutzerwunsch zurückgestellt. Dauerbetrieb,
+Status-/Credential-Topics, Topic-Inventar und separate openWB-Verbindung bleiben
+in ihren bisherigen Aufgaben; absolute Mapping-Ziele publizieren am Hauptbroker.
+
+**Lokaler QS-Nachweis vom 17.09.2026:** Basis `f29fbd9` mit lokalen Änderungen
+an Einmallauf, SoC-Check-Alias, Startskripten, Tests und Dokumentation.
+`./run_tests.sh`: Ruff erfolgreich, 203 Tests bestanden, Exit-Code 0; der darin
+enthaltene zusätzliche Legacy-E2E-Lauf ist kein Data-Portal-Nachweis.
+`./run_local.sh runonce-DataPortalAPI`: neuer Data-Portal-Lauf erfolgreich,
+17 MQTT-Publishes unter `polestar2-test/telemetry/battery` bestätigt, Exit-Code 0.
+Das Testtopic wurde aus `.env_local` geladen; der lokale Start liest keine
+Compose-Datei. Ohne lokale Mapping-Datei wurden nur dynamische Topics publiziert.
+Ein erster sandboxbeschränkter Versuch scheiterte am Netzwerkzugriff; der
+anschließend mit freigegebenem Netzwerkzugriff wiederholte Lauf war erfolgreich.
+Es wurde kein Container gebaut oder gestartet.
 
 ## M7 – Polling, Fehlerbehandlung und Shutdown überarbeiten
 
@@ -226,9 +369,14 @@ wird gezielt um neue Betriebsfunktionen wie den Credential-Status ergänzt.
 - [ ] Startreihenfolge festlegen: Konfiguration, MQTT, Credential-Status, Token, VIN-Prüfung, Polling.
 - [ ] Das bisherige `wait_and_die()` entfernen.
 - [ ] Temporäre API-Fehler ohne Prozessende behandeln.
-- [ ] Permanente Konfigurations- und Berechtigungsfehler klar kennzeichnen und mit langsamem Retry behandeln, sofern MQTT-Status beobachtbar bleiben soll.
+- [ ] Ungültige lokale Konfiguration wie in M2 beim Start ablehnen. Berechtigungs- und Credential-Fehler zur Laufzeit klar kennzeichnen und mit langsamem Retry behandeln, damit MQTT-Status beobachtbar bleibt.
+- [ ] Zuständigkeit und Gesamtbudget für Retries zwischen HTTP-Client, TokenProvider und Polling festlegen; Anzahl der Versuche, Backoff-Obergrenzen und Verhalten nach Erschöpfung dokumentieren, damit verschachtelte Retries keine Request-Flut erzeugen.
+- [ ] Ergänzende M5-QS: `502` wie im MVP-Konzept als temporären Fehler behandeln und durch Regressionstest absichern.
+- [ ] Ergänzende M5-QS: Höchstens einen durch `401` ausgelösten Token-Neubezug pro fachlichem Request auch über gemischte Folgen wie `401 → 503 → 401` sicherstellen; einen bereits verbrauchten Auth-Retry nicht durch Transport- oder Serverfehler zurücksetzen.
+- [ ] Token-Endpunkt-Ausfälle und die Erholung nach ausgeschöpften Retries ausdrücklich testen.
 - [ ] Eine enge Docker-Restart- oder Token-Request-Schleife verhindern.
 - [ ] SIGTERM-Verarbeitung und MQTT-Disconnect beibehalten bzw. testen.
+- [ ] Polling-, Backoff- und `Retry-After`-Wartezeiten unterbrechbar gestalten; SIGTERM während langer Wartezeiten und laufender Requests innerhalb einer dokumentierten Shutdown-Frist testen.
 - [ ] Systemzeitänderungen dürfen die Access-Token-Frist nicht verfälschen; monotone Zeit verwenden.
 - [ ] Integrationstests für mehrere Polling-Zyklen, Token-Erneuerung und Fehlererholung ergänzen.
 
@@ -241,13 +389,19 @@ wird gezielt um neue Betriebsfunktionen wie den Credential-Status ergänzt.
 
 - [ ] `docker-compose_example.yml` auf die neuen Variablen und sichere Platzhalter umstellen.
 - [ ] `POLESTAR_EMAIL` und `POLESTAR_PASSWORD` aus der Deployment-Vorlage entfernen.
+- [ ] Den ausführbaren Einstiegspunkt der neuen Programmsteuerung fertigstellen und Docker-`CMD`, den normalen lokalen Start sowie `runonce` darauf umstellen; keine Legacy-Credentials mehr in diesen Startwegen voraussetzen.
 - [ ] `README.md` mit Credential-Erstellung, Secret-Ablaufdatum, Migration und MQTT-Vertrag aktualisieren.
+- [ ] Das MVP-Konzept mit der hier festgelegten dynamischen Topic-Ausgabe und dem optionalen Beispiel-Mapping synchronisieren; bereits geklärte API-Fragen auf die M0-Nachweise verweisen lassen.
+- [ ] Schreibrechte des Containerbenutzers auf dem dauerhaft eingebundenen Zustandsverzeichnis sowie Verhalten bei Schreibfehlern prüfen und dokumentieren.
 - [ ] `Synology-howto.md` aktualisieren.
 - [ ] Lokale, ignorierte `docker-compose.yml` für den E2E-Test anpassen.
 - [ ] Docker-Image lokal bauen und automatisierte Tests darin ausführen.
 - [ ] Multi-Arch-Build im Workflow `.github/workflows/docker-image.yml` verifizieren.
-- [ ] End-to-End-Test mit echten Credentials, MQTT und optional openWB durchführen.
+- [ ] End-to-End-Test mit echten Credentials, MQTT und optional openWB zuerst über den normalen lokalen Start und danach über den regulären Container-Start durchführen; keinen Auth-/SoC-Sondereinstieg als Ersatz verwenden. `runonce` separat prüfen.
+- [ ] Im E2E-Test sowohl Betrieb ohne Mapping als auch die ausdrücklich aktivierte Beispiel-Zuordnung prüfen; dynamische Topics müssen in beiden Fällen erhalten bleiben.
+- [ ] Vor einem Produktionsrelease die Endpunkt-Klassifizierung aus M0 erneut prüfen und dokumentieren. Ein erfolgreicher Sandbox-Test allein ist kein Nachweis einer Produktionsfreigabe; einen weiter bestehenden Sandbox-Vorbehalt in den Release-Hinweisen ausweisen.
 - [ ] In Logs und MQTT prüfen, dass weder Client Secret noch Access Token vorkommen.
+- [ ] Neue QS-Nachweise mit Zeitpunkt, Szenario, Ergebnis und Commit beziehungsweise Image-Digest versehen; lokale Abweichungen vom Commit benennen, vertrauliche Daten weiterhin auslassen.
 
 **Abnahme:** Das neue Image startet anhand der versionierten Beispielkonfiguration; Login, VIN-Prüfung, SoC-MQTT-Publikation und Ablaufwarnung funktionieren im E2E-Test.
 
@@ -263,6 +417,7 @@ wird gezielt um neue Betriebsfunktionen wie den Credential-Status ergänzt.
 - [ ] Veraltete Umgebungsvariablen aus allen Dokumenten entfernen.
 - [ ] Optional beim Start eine eindeutige Fehlermeldung für noch gesetzte Altvariablen ausgeben.
 - [ ] Gesamte Testsuite, Linter und Docker-Build ausführen.
+- [ ] Den E2E-Test nach Entfernung des Legacy-Codes mit dem finalen Image über dessen regulären Startweg wiederholen und den getesteten Image-Digest dokumentieren.
 - [ ] Release Notes mit Breaking Changes und Migrationsanleitung erstellen.
 
 **Abnahme:** Zur Laufzeit existiert keine Abhängigkeit mehr von der inoffiziellen API; Tests, Image-Build und E2E-Test sind erfolgreich.
@@ -275,3 +430,4 @@ wird gezielt um neue Betriebsfunktionen wie den Credential-Status ergänzt.
 - automatische Erstellung oder Rotation des Client Secrets
 - persistente Speicherung bereits ausgegebener Ablaufwarnungen
 - automatische Auswahl einer VIN bei mehreren Fahrzeugen
+- garantierte Rückwärtskompatibilität zu Legacy-Telemetrie-Topics oder automatische Aktivierung des Beispiel-Mappings

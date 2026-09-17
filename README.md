@@ -147,14 +147,29 @@ This mode only requests an OAuth token. It does not start the legacy application
 connect to vehicle, telemetry, MQTT, or openWB endpoints. `./run_auth_check.sh` remains available
 as a convenience wrapper for the same mode.
 
-For a one-time live quality check of vehicle authorization and Battery SoC, use:
+For one Data Portal read followed by confirmed MQTT output, use:
 
 ```bash
-./run_soc_check.sh
+./run_local.sh runonce-DataPortalAPI
 ```
 
-This mode prints only the validated SoC percentage; credentials, VIN, token, and other vehicle
-data are not printed.
+This mode authenticates, checks vehicle authorization, validates Battery SoC and publishes the
+complete current Battery response retained with QoS 1 under
+`<MQTT_BASE_TOPIC>/telemetry/battery`. It exits successfully only after the broker acknowledges
+every publication. The console reports only success and the topic count; credentials, tokens,
+VIN and measurement values are not printed. The MQTT payload includes the API's vehicle data.
+
+Local runs load `.env` and `.env_local`; the MQTT settings in `.env_local` must point to the
+intended broker and test topic. Local runs do not read `docker-compose.yml`.
+Optional JSON-path mappings are loaded from `local-files/mqtt_topic_mapping.csv`, or from
+`MQTT_TOPIC_MAPPING_FILE` if set. Absolute mapping targets use their exact configured topic.
+See [the mapping documentation](doc/README.md#data-portal-mapping-json-pfad-zu-zusätzlichem-mqtt-topic).
+
+`./run_soc_check.sh`, `./run_local.sh soc-check`, and `python -m polestar_mqtt.soc_check`
+are compatibility entry points for this same command and **now also publish to MQTT**.
+The legacy `./run_local.sh runonce` remains separate. This intermediate command does not run
+a polling loop, publish container status, delete old retained topics, or forward separately to
+the openWB broker. It has been tested locally; container validation is deferred.
 
 ## Unit tests
 

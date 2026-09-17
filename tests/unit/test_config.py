@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from polestar_mqtt.config import (
+    DEFAULT_MQTT_TOPIC_MAPPING_FILE,
     DEFAULT_POLESTAR_API_BASE_URL,
     REDACTED_VALUE,
     ConfigurationError,
@@ -46,6 +47,7 @@ def test_loads_valid_configuration_with_defaults(
     assert config.mqtt_user == ""
     assert config.mqtt_password == ""
     assert config.mqtt_base_topic == "polestar2"
+    assert config.mqtt_topic_mapping_file == DEFAULT_MQTT_TOPIC_MAPPING_FILE
     assert config.openwb_publish is False
     assert config.openwb_host == "localhost"
     assert config.openwb_port == 1883
@@ -65,6 +67,7 @@ def test_loads_runtime_overrides(valid_environment: dict[str, str]) -> None:
             "MQTT_USER": "mqtt-user",
             "MQTT_PASSWORD": "mqtt-password-value",
             "MQTT_BASE_TOPIC": "vehicle",
+            "MQTT_TOPIC_MAPPING_FILE": "local-files/custom-mapping.csv",
             "OPENWB_PUBLISH": "true",
             "OPENWB_HOST": "openwb.example.invalid",
             "OPENWB_PORT": "1884",
@@ -84,6 +87,9 @@ def test_loads_runtime_overrides(valid_environment: dict[str, str]) -> None:
         "mqtt-user",
         "mqtt-password-value",
         "vehicle",
+    )
+    assert config.mqtt_topic_mapping_file.as_posix() == (
+        "local-files/custom-mapping.csv"
     )
     assert config.openwb_publish is True
     assert (config.openwb_host, config.openwb_port, config.openwb_lp_num) == (
