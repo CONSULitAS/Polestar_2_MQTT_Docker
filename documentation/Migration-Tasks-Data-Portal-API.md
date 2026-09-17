@@ -90,15 +90,15 @@ Repository-Root gepflegt.
 **Abhängigkeiten:** M1, M2
 
 - [x] `POST /token` mit `clientId`, `clientSecret` und minimalem Battery-Scope implementieren.
-- [ ] JSON- oder Form-Encoding bewusst auswählen und testen.
-- [ ] `accessToken`, `expiresIn` und `tokenType` validieren.
-- [ ] Token ausschließlich im Speicher halten.
-- [ ] Ablaufzeit monoton berechnen und 60 Sekunden Sicherheitsmarge berücksichtigen.
-- [ ] Vor Ablauf automatisch ein neues Token per Client-Credentials-Flow beziehen.
-- [ ] Keinen Refresh-Token-Flow implementieren.
-- [ ] Connect- und Read-Timeouts setzen.
-- [ ] Fehlerantworten redigiert in eigene Exception-Typen überführen.
-- [ ] Unit-Tests für Erfolg, ungültige Antwort, `400`, `401`, `500`, `502`, `503` und Timeout ergänzen.
+- [x] JSON- oder Form-Encoding bewusst auswählen und testen.
+- [x] `accessToken`, `expiresIn` und `tokenType` validieren.
+- [x] Token ausschließlich im Speicher halten.
+- [x] Ablaufzeit monoton berechnen und 60 Sekunden Sicherheitsmarge berücksichtigen.
+- [x] Vor Ablauf automatisch ein neues Token per Client-Credentials-Flow beziehen.
+- [x] Keinen Refresh-Token-Flow implementieren.
+- [x] Connect- und Read-Timeouts setzen.
+- [x] Fehlerantworten redigiert in eigene Exception-Typen überführen.
+- [x] Unit-Tests für Erfolg, ungültige Antwort, `400`, `401`, `500`, `502`, `503` und Timeout ergänzen.
 
 **Abnahme:** Token werden wiederverwendet und rechtzeitig ersetzt; Secrets und Access Tokens erscheinen nicht im Log.
 
@@ -109,21 +109,39 @@ Repository-Root gepflegt.
 
 Dieser Zwischenstand weist die Anmeldung mit dem neu implementierten Code nach, bevor Fahrzeug- oder Telemetrie-Endpunkte entwickelt werden.
 
-- [ ] Einen separaten Einstiegspunkt `python -m polestar_mqtt.auth_check` implementieren.
-- [ ] Ausschließlich Konfiguration laden und `POST /token` über den neuen `TokenProvider` ausführen.
-- [ ] Keine Fahrzeug-, Battery-, MQTT- oder openWB-Verbindung aufbauen.
-- [ ] Bei Erfolg nur eine redigierte Zusammenfassung ausgeben: HTTP-Erfolg, Token-Typ und `expiresIn`; niemals Client Secret oder Access Token.
-- [ ] Für Erfolg Exit-Code 0 und für Konfigurations-, Authentifizierungs- oder Transportfehler einen Exit-Code ungleich 0 liefern.
-- [ ] Den Check mit den lokalen, ignorierten Credentials containerisiert ausführen:
+- [x] Einen separaten Einstiegspunkt `python -m polestar_mqtt.auth_check` implementieren.
+- [x] Ausschließlich Konfiguration laden und `POST /token` über den neuen `TokenProvider` ausführen.
+- [x] Keine Fahrzeug-, Battery-, MQTT- oder openWB-Verbindung aufbauen.
+- [x] Bei Erfolg nur eine redigierte Zusammenfassung ausgeben: HTTP-Erfolg, Token-Typ und `expiresIn`; niemals Client Secret oder Access Token.
+- [x] Für Erfolg Exit-Code 0 und für Konfigurations-, Authentifizierungs- oder Transportfehler einen Exit-Code ungleich 0 liefern.
+- [x] Den Auth-only-Check lokal mit echten Credentials ausführen:
+
+  ```sh
+  ./run_local.sh auth-check
+  ```
+
+- [x] Den Check mit den lokalen, ignorierten Credentials containerisiert ausführen:
 
   ```sh
   docker compose build polestar2mqtt
   docker compose run --rm polestar2mqtt python -m polestar_mqtt.auth_check
   ```
 
-- [ ] Im Testprotokoll nur Zeitpunkt, Ergebnis, Token-Typ und Laufzeit festhalten.
+- [x] Im Testprotokoll nur Zeitpunkt, Ergebnis, Token-Typ und Laufzeit festhalten.
 
 **Abnahme:** Der neu gebaute Container bezieht mit den lokalen Credentials über den neuen Code erfolgreich einen Access Token und beendet sich mit Exit-Code 0, ohne einen fachlichen API-Endpunkt aufzurufen oder vertrauliche Werte auszugeben. Erst danach beginnt M5.
+
+**Auth-only-QS-Nachweis vom 17.09.2026:** Das Image wurde lokal neu gebaut und
+`python -m polestar_mqtt.auth_check` im Container mit den ignorierten lokalen
+Credentials ausgeführt. Ergebnis: erfolgreich, Token-Typ `Bearer`, Laufzeit
+3.600 Sekunden, Exit-Code 0. Es wurden weder Access Token noch Client Secret,
+VIN oder fachliche Fahrzeugdaten ausgegeben; Fahrzeug-, Battery-, MQTT- und
+openWB-Endpunkte wurden nicht aufgerufen.
+
+Zusätzlich wurde derselbe Auth-only-Check außerhalb des Containers über
+`./run_local.sh auth-check` mit `.env` und `.env_local` ausgeführt. Ergebnis:
+erfolgreich, Token-Typ `Bearer`, Laufzeit 3.600 Sekunden, Exit-Code 0. Auch
+dieser Lauf rief ausschließlich `POST /token` auf.
 
 ## M5 – Data-Portal-Client für Fahrzeuge und Battery implementieren
 

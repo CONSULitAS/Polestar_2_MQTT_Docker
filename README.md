@@ -137,6 +137,16 @@ For a single polling cycle without the endless loop, use:
 
 This is mainly intended for a local end-to-end check.
 
+For an authentication-only development check against the official Data Portal API, use:
+
+```bash
+./run_local.sh auth-check
+```
+
+This mode only requests an OAuth token. It does not start the legacy application and does not
+connect to vehicle, telemetry, MQTT, or openWB endpoints. `./run_auth_check.sh` remains available
+as a convenience wrapper for the same mode.
+
 ## Unit tests
 
 Unit tests are based on `pytest` and mock all external dependencies such as the Polestar API and MQTT brokers.

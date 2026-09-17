@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"
 REQUIREMENTS_FILE="${SCRIPT_DIR}/src/requirements.txt"
 APP_FILE="${SCRIPT_DIR}/src/Polestar_2_MQTT.py"
+AUTH_CHECK_MODULE="polestar_mqtt.auth_check"
 ENV_FILE="${SCRIPT_DIR}/.env"
 ENV_LOCAL_FILE="${SCRIPT_DIR}/.env_local"
 VENV_PYTHON="${VENV_DIR}/bin/python"
@@ -32,19 +33,20 @@ if [[ ! -f "${ENV_FILE}" ]]; then
     exit 1
 fi
 
-if [[ ! -f "${ENV_LOCAL_FILE}" ]]; then
-    echo "Missing ${ENV_LOCAL_FILE}. Create it with the local runtime values from docker-compose.yml." >&2
-    exit 1
-fi
-
 if (( ${#APP_ARGS[@]} > 1 )); then
-    echo "Usage: ./run_local.sh [runonce]" >&2
+    echo "Usage: ./run_local.sh [runonce|auth-check]" >&2
     exit 1
 fi
 
-if (( ${#APP_ARGS[@]} == 1 )) && [[ "${APP_ARGS[0]}" != "runonce" ]]; then
+RUN_MODE="${APP_ARGS[0]:-run}"
+if [[ "${RUN_MODE}" != "run" && "${RUN_MODE}" != "runonce" && "${RUN_MODE}" != "auth-check" ]]; then
     echo "Unsupported argument: ${APP_ARGS[0]}" >&2
-    echo "Usage: ./run_local.sh [runonce]" >&2
+    echo "Usage: ./run_local.sh [runonce|auth-check]" >&2
+    exit 1
+fi
+
+if [[ "${RUN_MODE}" != "auth-check" && ! -f "${ENV_LOCAL_FILE}" ]]; then
+    echo "Missing ${ENV_LOCAL_FILE}. Create it with the local runtime values from docker-compose.yml." >&2
     exit 1
 fi
 
@@ -59,7 +61,9 @@ load_env_file() {
 }
 
 load_env_file "${ENV_FILE}"
-load_env_file "${ENV_LOCAL_FILE}"
+if [[ -f "${ENV_LOCAL_FILE}" ]]; then
+    load_env_file "${ENV_LOCAL_FILE}"
+fi
 
 create_venv() {
     echo "Creating virtual environment in ${VENV_DIR}"
@@ -91,6 +95,12 @@ echo "Upgrading pip tooling"
 
 echo "Installing Python dependencies"
 "${VENV_PYTHON}" -m pip install --quiet --upgrade -r "${REQUIREMENTS_FILE}"
+
+if [[ "${RUN_MODE}" == "auth-check" ]]; then
+    export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+    echo "Starting authentication-only Data Portal check"
+    exec "${VENV_PYTHON}" -m "${AUTH_CHECK_MODULE}"
+fi
 
 # These variables must be set and non-empty for a local run.
 missing_env=()

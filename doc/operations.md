@@ -11,6 +11,14 @@
 2. Werte anpassen.
 3. `./run_local.sh` ausführen.
 
+Nur die Anmeldung an der offiziellen Data Portal API prüfen:
+
+```sh
+./run_local.sh auth-check
+```
+
+Dieser Entwicklungsmodus ruft ausschließlich den Token-Endpunkt auf.
+
 ## Relevante Umgebungsvariablen
 - Polestar Data Portal: `POLESTAR_ACCOUNT_ID`, `POLESTAR_CLIENT_ID`,
   `POLESTAR_CLIENT_SECRET`, `POLESTAR_CLIENT_SECRET_EXPIRES_AT`, `POLESTAR_VIN`,
