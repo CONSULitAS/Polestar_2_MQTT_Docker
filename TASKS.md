@@ -1,5 +1,13 @@
 # TASKS.md
 
+## Migration auf die offizielle Data Portal API
+
+Die detaillierte, sequenziell abgearbeitete Migration einschließlich des
+containerisierten Auth-only-QS-Gates wird in
+[`documentation/Migration-Tasks-Data-Portal-API.md`](documentation/Migration-Tasks-Data-Portal-API.md)
+geführt. Bis zur dort vorgesehenen Umschaltung bleiben die stabilisierten
+Legacy-Module `src/auth.py` und `src/graphql_queries.py` erhalten.
+
 ## Stabilisierungsmaßnahmen (Priorität)
 
 - [ ] API-/GraphQL-Fehlerpfad in Notlauf überführen

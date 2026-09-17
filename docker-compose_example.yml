@@ -26,11 +26,19 @@ services:
     restart: always
     environment:
       # Credentials for Polestar Data Portal API (https://data-portal.polestar.com/de/api-credentials/docs)
+      # see "Account ID / x-client-id" in the "API Documentation" tab
       POLESTAR_ACCOUNT_ID:               "${POLESTAR_ACCOUNT_ID}"
+      # generate an API credential in the "API Credential" tab
       POLESTAR_CLIENT_ID:                "${POLESTAR_CLIENT_ID}"
       POLESTAR_CLIENT_SECRET:            "${POLESTAR_CLIENT_SECRET}"
+      # copy "Expires on YYYY-MM-DD (90 days)" from the "API Credential" tab
       POLESTAR_CLIENT_SECRET_EXPIRES_AT: "${POLESTAR_CLIENT_SECRET_EXPIRES_AT}"
+      # VIN of the vehicle (one container per vehicle with its own VIN)
       POLESTAR_VIN:                      "${POLESTAR_VIN}"
+
+      # temporary legacy login required until the Data Portal runtime replaces the old entry point
+      POLESTAR_EMAIL:                    "${POLESTAR_EMAIL}"
+      POLESTAR_PASSWORD:                 "${POLESTAR_PASSWORD}"
 
       # standard configuration
       TZ:                "Europe/Berlin"

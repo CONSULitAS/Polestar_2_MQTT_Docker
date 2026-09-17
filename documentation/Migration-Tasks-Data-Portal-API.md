@@ -36,6 +36,13 @@ Diese Taskliste setzt das [MVP-Konzept](MVP-offizielle-Data-Portal-API.md) für 
 
 **Abnahme:** Ein minimaler Testlauf funktioniert lokal und verändert das Laufzeitverhalten noch nicht.
 
+**Upstream-Abgleich vom 17.09.2026:** Der zwischenzeitlich nach `main` aufgenommene
+Legacy-Refactor (`src/auth.py`, `src/graphql_queries.py`, zentrale Tests unter `tests/`)
+bleibt bis zur finalen Umschaltung erhalten. Die Data-Portal-Implementierung bleibt
+im separaten Package `src/polestar_mqtt/`. Testkonfiguration und Dev-Abhängigkeiten
+werden ausschließlich zentral über `pytest.ini` und `requirements-dev.txt` im
+Repository-Root gepflegt.
+
 ## M2 – Neue Konfiguration implementieren
 
 **Priorität:** Hoch  

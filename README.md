@@ -31,16 +31,43 @@ Used by:
 Typical content:
 
 ```env
+POLESTAR_ACCOUNT_ID="12345678-1234-1234-1234-123456789abc"
+POLESTAR_CLIENT_ID="your-client-id"
+POLESTAR_CLIENT_SECRET="your-client-secret"
+POLESTAR_CLIENT_SECRET_EXPIRES_AT="2099-12-31"
+POLESTAR_VIN="LPSVS000000000000"
+
+# Temporary legacy login used until the Data Portal runtime is activated
 POLESTAR_EMAIL="you@example.com"
 POLESTAR_PASSWORD="your-polestar-password"
-POLESTAR_VIN="your-vin-without-spaces"
+
 MQTT_USER=""
 MQTT_PASSWORD=""
 ```
 
 Notes:
 * keep `MQTT_USER` and `MQTT_PASSWORD` empty if your broker has no login
-* `POLESTAR_VIN` must not contain spaces
+* use the portal's `YYYY-MM-DD` format for `POLESTAR_CLIENT_SECRET_EXPIRES_AT`
+* `.env.example` temporarily also contains the legacy email/password fields required by
+  `run_local.sh`; they will be removed when the Data Portal runtime becomes the main entry point
+
+#### Register and obtain Data Portal credentials
+
+1. Open the [Polestar Data Portal](https://data-portal.polestar.com/) and sign in or complete the
+   registration offered by the portal.
+2. Open the API credentials area. The documentation is available at
+   [API Documentation](https://data-portal.polestar.com/de/api-credentials/docs).
+3. In the **API Documentation** tab, copy **Account ID / x-client-id** to
+   `POLESTAR_ACCOUNT_ID`.
+4. In the **API Credential** tab, generate a client credential.
+5. Copy **App client ID** to `POLESTAR_CLIENT_ID` and **Client secret** to
+   `POLESTAR_CLIENT_SECRET`.
+6. Copy the date shown as **Expires on YYYY-MM-DD (90 days)** to
+   `POLESTAR_CLIENT_SECRET_EXPIRES_AT`. Generate a replacement credential before this date.
+7. Enter the vehicle's 17-character VIN as `POLESTAR_VIN`.
+
+The App client ID identifies the API application. The Account ID is a separate value used as the
+required `x-client-id` header for vehicle and telemetry requests.
 
 ### `.env_local`
 
@@ -132,6 +159,7 @@ Current focus of the test suite:
 * auth and token handling in `src/auth.py`
 * GraphQL payload builders in `src/graphql_queries.py`
 * MQTT publishing helpers and API response parsing in `src/Polestar_2_MQTT.py`
+* Data Portal configuration, credential expiry, and HTTP transport in `src/polestar_mqtt/`
 
 Discussions (in german ) here:
 https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
