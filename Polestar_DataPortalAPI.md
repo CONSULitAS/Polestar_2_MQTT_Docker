@@ -10,3 +10,16 @@ Raw OpenAPI spec
 API Rate limits
 Maximum of 10,000 API calls per client, per day.
 
+## Anwendungseinrichtung
+Erstellen Sie eine Anwendung, um auf die API zuzugreifen
+Bereitgestellte Zugangsdaten können sein:
+* API-Schlüssel
+* OAuth-Client-Zugangsdaten
+## Erforderliche Header
+Jede Anfrage muss enthalten:
+* accept: application/json
+* authorization: Bearer <access_token>
+* x-api-key: <api_key>
+## Genehmigung
+OAuth2 wird erwartet
+* Access Token muss in Anfrage-Headern enthalten sein

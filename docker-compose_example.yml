@@ -23,10 +23,20 @@ services:
     container_name: "polestar2mqtt"
     restart: always
     environment:
+      # Credentials for Polestar Data Portal API (https://data-portal.polestar.com/de/api-credentials/docs)
+      #
+      # see the "API Documentation" tab
+      POLESTAR_ACCOUNT_ID:               "12345678-1234-1234-1234-123456789abc"
+      # generate in the "API Credential" tab
+      POLESTAR_CLIENT_ID:                "your-client-id"
+      POLESTAR_CLIENT_SECRET:            "your-client-secret"
+      # copy "Expires on YYYY-MM-DD (90 days)" from the "API Credential" tab
+      POLESTAR_CLIENT_SECRET_EXPIRES_AT: "2099-12-31"
+      # VIN of the vehicle (one container per vehicle with its own VIN)
+      POLESTAR_VIN:                      "LPSVS000000000000"
+
+      # standard configuration
       TZ:                "Europe/Berlin"
-      POLESTAR_EMAIL:    "xx@xxx"
-      POLESTAR_PASSWORD: "XXX"
-      POLESTAR_VIN:      "LPSVSEDEEMLxxxxxx" # no spaces allowed
       POLESTAR_CYCLE:    270 # seconds
       MQTT_BROKER:       "192.168.1.100" # IP or DNS name
       MQTT_PORT:         "1883"

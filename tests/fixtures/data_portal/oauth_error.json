@@ -1,0 +1,6 @@
+{
+  "error": "invalid_client",
+  "error_description": "Fixture: invalid client credentials",
+  "requestId": "fixture-oauth-request-id",
+  "timestamp": "2026-01-01T00:00:00Z"
+}

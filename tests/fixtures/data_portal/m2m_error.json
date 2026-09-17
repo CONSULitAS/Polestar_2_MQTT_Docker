@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "DATA_NOT_AVAILABLE",
+    "message": "Fixture: vehicle has no data for this domain",
+    "httpStatus": 404,
+    "requestId": "fixture-m2m-request-id",
+    "timestamp": "2026-01-01T00:00:00Z",
+    "details": {}
+  }
+}

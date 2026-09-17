@@ -1,0 +1,19 @@
+{
+  "data": {
+    "vin": "LPSVS000000000000",
+    "timestamp": {
+      "seconds": "1788362002",
+      "nanos": 200583773
+    },
+    "batteryChargeLevelPercentage": 50,
+    "chargerConnectionStatus": "CHARGER_CONNECTION_STATUS_DISCONNECTED",
+    "chargingStatusV2": "CHARGING_STATUS_V2_IDLE",
+    "estimatedDistanceToEmptyKm": 200,
+    "metaReceivedAt": "2026-09-02T18:46:42.200583773Z",
+    "metaEventId": "fixture-event-id"
+  },
+  "meta": {
+    "vin": "LPSVS000000000000",
+    "domain": "battery"
+  }
+}
