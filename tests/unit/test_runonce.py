@@ -9,7 +9,7 @@ import pytest
 
 from polestar_mqtt import runonce
 from polestar_mqtt.config import DEFAULT_POLESTAR_API_BASE_URL
-from polestar_mqtt.soc_check import main
+from polestar_mqtt.runonce import main
 
 
 @pytest.fixture

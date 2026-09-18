@@ -1,6 +1,6 @@
 # Tasks: Migration auf die offizielle Polestar Data Portal API
 
-Diese Taskliste setzt das [MVP-Konzept](MVP-offizielle-Data-Portal-API.md) für Login und SoC-Abruf um. Die Reihenfolge berücksichtigt technische Abhängigkeiten. M8 liefert den funktionalen End-to-End-Nachweis; abgeschlossen ist die Migration nach der anschließenden Bereinigung in M9.
+Diese Taskliste setzt das [MVP-Konzept](MVP-offizielle-Data-Portal-API.md) für Login und SoC-Abruf um. Die Reihenfolge berücksichtigt technische Abhängigkeiten. M8 liefert den funktionalen End-to-End-Nachweis; abgeschlossen ist die Migration nach der anschließenden Bereinigung in M9. M10 ergänzt danach optional die Home-Assistant-Autokonfiguration und blockiert den MVP-Abschluss nicht.
 
 **QS-Ergänzungen vom 17.09.2026:** Dokumentierte Fortschritte und Nachweise bleiben
 erhalten; ergänzende Prüfungen werden als neue offene Aufgaben geführt. Für die
@@ -303,7 +303,7 @@ daher kein erneuter vollständiger Test- oder Live-Lauf.
 
 ### M6.2 – Bestätigte Veröffentlichung und dauerhaftes Topic-Inventar
 
-- [ ] Die zuletzt erfolgreich publizierte Menge der verwalteten dynamischen und Mapping-Topics in einer lokalen Zustandsdatei außerhalb des Containers persistieren.
+- [x] Die zuletzt erfolgreich publizierte Menge der verwalteten dynamischen und Mapping-Topics in einer lokalen Zustandsdatei außerhalb des Containers persistieren.
 - [ ] Die Zustandsdatei über `local-files` dauerhaft in den Container einbinden und atomar aktualisieren, damit Container-Neustarts die Topic-Historie nicht verlieren.
 - [ ] Nach einer fachlich validierten API-Antwort die zuvor persistierten Topics mit der gemäß Entscheidungstabelle aktuell erzeugten Topic-Menge vergleichen; Transportfehler und abgelehnte Antworten dürfen keine Inventarbereinigung auslösen.
 - [ ] Nicht mehr erzeugte verwaltete Topics mit einem leeren retained Publish (Zero-Length-Payload) und QoS 1 aus dem Broker löschen.
@@ -315,6 +315,20 @@ daher kein erneuter vollständiger Test- oder Live-Lauf.
 - [ ] `<base>/container` einschließlich aller Unterpfade als stabile, separat verwaltete Betriebs- und Statusschnittstelle schützen (MQTT-Filter `<base>/container/#`); diesen Bereich weder dynamisch aus API-JSON erzeugen noch in das Telemetrie-Topic-Inventar aufnehmen.
 - [ ] Relative und absolute Mapping-Ziele im gesamten geschützten Container-Namespace ablehnen.
 - [ ] Den Umgang mit alten retained GraphQL-Topics dokumentieren: Sie gehören nicht automatisch zum neuen Inventar. Eine gezielte manuelle Bereinigung erläutern; keine pauschale Löschung des bisherigen Topic-Baums vorsehen.
+
+**QS-Nachweis lokale Persistenz vom 18.09.2026:** Nach vollständig bestätigten
+Publishes speichert der Einmallauf die eindeutige, sortierte Topic-Menge mit
+Formatversion in `local-files/mqtt_topic_state.json`; `MQTT_TOPIC_STATE_FILE`
+überschreibt den Pfad. Die Datei enthält keine Messwerte oder Credentials.
+Fehlgeschlagene oder nur teilweise bestätigte Publishes ersetzen den vorherigen
+Stand nicht; Schreibfehler führen zu einem Fehlerabschluss. Tests prüfen
+dynamische und Mapping-Topics, Deduplizierung, Ersetzen, fehlgeschlagene Speicherung
+und Cleanup. Basis zum Abschluss: `f6fa00e` mit lokalen Dokumentations- und
+Teständerungen einschließlich Umbenennung in `tests/unit/test_runonce.py`.
+`./run_tests.sh`: Ruff erfolgreich, 252 Tests bestanden, Exit-Code 0.
+Shell-Syntax und `git diff --check` erfolgreich. Kein Container-Test.
+Container-Persistenz, Vergleich, Löschung und vollständige Absturz-Wiederaufnahme
+bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht ab.
 
 ### M6.3 – Betriebsstatus, Change Detection und openWB
 
@@ -440,6 +454,7 @@ Es wurde kein Container gebaut oder gestartet.
 - [ ] Refresh-Token-Code entfernen.
 - [ ] GraphQL-Requests an `mystar-v2` entfernen.
 - [ ] Nicht mehr benötigte Imports und Abhängigkeiten entfernen.
+- [ ] Verbliebene Übergangsnamen und Einstiegspunkte bereinigen: `soc-check`, `run_soc_check.sh` und `polestar_mqtt.soc_check` bei der finalen Umschaltung entfernen oder ihre weitere Unterstützung ausdrücklich begründen; Referenzen und Laufzeitbeschreibungen in README, `doc/`, `AGENTS.md` und `TASKS.md` aktualisieren. Historische QS-Nachweise unverändert lassen. Die aktuellen Einmallauf-Tests heißen bereits `tests/unit/test_runonce.py` und testen direkt `polestar_mqtt.runonce`.
 - [ ] Veraltete Umgebungsvariablen aus allen Dokumenten entfernen.
 - [ ] Optional beim Start eine eindeutige Fehlermeldung für noch gesetzte Altvariablen ausgeben.
 - [ ] Gesamte Testsuite, Linter und Docker-Build ausführen.
@@ -447,6 +462,37 @@ Es wurde kein Container gebaut oder gestartet.
 - [ ] Release Notes mit Breaking Changes und Migrationsanleitung erstellen.
 
 **Abnahme:** Zur Laufzeit existiert keine Abhängigkeit mehr von der inoffiziellen API; Tests, Image-Build und E2E-Test sind erfolgreich.
+
+## M10 – Optionale Home-Assistant-Autokonfiguration
+
+**Priorität:** Optionale Erweiterung auf Nutzerwunsch
+
+**Abhängigkeiten:** M6–M9, insbesondere stabiler Topic-Vertrag und MQTT-Verfügbarkeit
+
+Ziel: Ausgewählte MQTT-Messwerte per Discovery bekannt machen, sodass Home
+Assistant ein Fahrzeuggerät mit den zugehörigen Entitäten automatisch anlegt.
+Voraussetzung ist eine eingerichtete HA-MQTT-Integration am verwendeten Broker.
+Grundlagen: [MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+und [MQTT Sensor](https://www.home-assistant.io/integrations/sensor.mqtt/).
+
+- [ ] HA-Discovery ausdrücklich optional und standardmäßig deaktiviert konfigurieren; Discovery-Präfix (standardmäßig `homeassistant`) einstellbar machen.
+- [ ] Eine explizite Auswahl zu veröffentlichender JSON-Pfade und ihrer HA-Metadaten vorsehen, zunächst etwa SoC, Ladestatus, Restladezeit und Reichweite. Unbekannte dynamische MQTT-Felder nicht automatisch als HA-Entitäten anlegen.
+- [ ] Entitäten über gemeinsame `device.identifiers` einem Fahrzeuggerät zuordnen; Gerätekennung aus der VIN ableiten und synthetische Kennungen in Tests und Beispielen verwenden.
+- [ ] Stabile Entity-`unique_id` nach dem Schema `<VIN>-<JSON.Pfad.mit.Punkt>` vorsehen, beispielsweise `<VIN>-data.batteryChargeLevelPercentage`. Kanonische Pfaddarstellung und kollisionsfreie Kodierung für besondere Schlüssel/Array-Indizes festlegen; IDs unabhängig von Anzeigenamen und MQTT-Basis halten.
+- [ ] `unique_id`, Discovery-Topic-Kennung und HA-`entity_id` unterscheiden: Die Discovery-Topic-Kennung regelkonform kodieren; die sichtbare `entity_id` wird von HA verwaltet und muss nicht der `unique_id` entsprechen.
+- [ ] Test- und Produktionsinstanzen desselben Fahrzeugs getrennt betreibbar machen: optionalen Instanz-Namespace für Discovery- und Geräte-/Entity-IDs vorsehen. Ein anderes MQTT-Testtopic allein verhindert keine HA-ID-Kollisionen.
+- [ ] Discovery-Konfigurationen mit `state_topic`, Anzeigename, passendem Entity-Typ, Einheit sowie fachlich passenden `device_class`/`state_class` erzeugen; keine Messklasse pauschal für alle Felder setzen.
+- [ ] Für Werte wie Ladestatus eine explizite Wertetabelle beziehungsweise ein HA-`value_template` vorsehen, beispielsweise `CHARGING_STATUS_V2_IDLE` → `idle`. Verhalten für neue/unbekannte Statuscodes und `null` definieren; Enum-Optionen bei Bedarf konsistent halten. Diese Werteübersetzung von der vorhandenen JSON-Pfad-zu-Topic-Zuordnung trennen und die dynamischen Rohwerte unverändert lassen.
+- [ ] Discovery-Konfigurationen retained veröffentlichen und nach HA-Neustart/Birth sowie MQTT-Reconnect wieder verfügbar machen; Availability an den vorgesehenen Betriebsstatus anbinden und von Messwertalter unterscheiden.
+- [ ] Eigene Discovery-Topics separat inventarisieren; abgewählte Entitäten und deaktivierte Discovery gezielt abmelden, ohne fremde Discovery-Konfigurationen oder Telemetrie-Topics zu löschen. Vorübergehend fehlende Messwerte dürfen Geräte nicht ständig entfernen und neu anlegen.
+- [ ] Tests für stabile IDs, Gerätezuordnung, Auswahl, Statusübersetzung, unbekannte Werte, Neustarts und Abmeldung ergänzen. Anschließend E2E-Test mit einer HA-Testinstanz durchführen.
+- [ ] Konfiguration und Migration dokumentieren, einschließlich Sichtbarkeit der VIN-basierten IDs in MQTT/HA und Trennung von Test-/Produktionsinstanzen; keine echten VINs in Logs oder versionierte Beispiele aufnehmen.
+
+**Abnahme:** Bei aktivierter Discovery erscheint pro Fahrzeug und Instanz ein
+Gerät mit ausschließlich den ausgewählten Entitäten. Zustände und Statusübersetzungen
+stimmen mit der Quelle überein; Neustarts erzeugen keine Duplikate. Bei deaktivierter
+Discovery entstehen keine neuen HA-Ankündigungen, und die normale MQTT-Ausgabe
+funktioniert unabhängig davon weiter. Die Umsetzung dieses Meilensteins ist offen.
 
 ## Nicht Teil dieses MVP
 

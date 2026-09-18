@@ -163,6 +163,9 @@ Local runs load `.env` and `.env_local`; the MQTT settings in `.env_local` must 
 intended broker and test topic. Local runs do not read `docker-compose.yml`.
 Optional JSON-path mappings are loaded from `local-files/mqtt_topic_mapping.csv`, or from
 `MQTT_TOPIC_MAPPING_FILE` if set. Absolute mapping targets use their exact configured topic.
+After all publications are acknowledged, topic names are saved to
+`local-files/mqtt_topic_state.json` (override with `MQTT_TOPIC_STATE_FILE`).
+The parent directory must be writable. This inventory does not yet trigger topic deletion.
 See [the mapping documentation](doc/README.md#data-portal-mapping-json-pfad-zu-zusätzlichem-mqtt-topic).
 
 `./run_soc_check.sh`, `./run_local.sh soc-check`, and `python -m polestar_mqtt.soc_check`

@@ -19,6 +19,21 @@ Dieser Ordner enthält die technische Projektdokumentation ergänzend zur `READM
 
 ## Data-Portal-Ausgabe: dynamischer Topic-Baum
 
+Der lokale Einmallauf speichert nach Bestätigung sämtlicher Telemetrie-Publishes
+die tatsächlich publizierten dynamischen und Mapping-Topic-Namen in
+`local-files/mqtt_topic_state.json`. `MQTT_TOPIC_STATE_FILE` kann den Pfad ändern;
+beim direkten Modulstart ist der Default `/local-files/mqtt_topic_state.json`.
+Das übergeordnete Verzeichnis muss existieren und schreibbar sein. Die lokale
+Standarddatei ist von Git ausgeschlossen und enthält ausschließlich eine
+Formatversion und sortierte eindeutige Topic-Namen, keine Payloads oder Credentials.
+
+Bei MQTT-Fehlern wird der vorherige Dateistand nicht ersetzt. Ein Schreibfehler
+führt zu einem fehlgeschlagenen Einmallauf, auch wenn MQTT bereits bestätigt hat.
+Das Speichern erfolgt über eine temporäre Datei mit anschließendem Ersetzen;
+es ist noch kein vollständiges Wiederanlaufprotokoll. Das Inventar wird derzeit
+nicht für Vergleiche oder Löschungen verwendet. Dauerhafte Container-Einbindung,
+Broker-/Instanzzuordnung und Wiederaufnahme nach Prozessabstürzen folgen separat.
+
 Für die Battery-Ausgabe ist die Wurzel
 `<MQTT_BASE_TOPIC>/telemetry/battery` festgelegt. Die Programmsteuerung soll dem
 Publisher die vollständige, fachlich validierte Battery-Antwort einschließlich

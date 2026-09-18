@@ -48,6 +48,7 @@ def test_loads_valid_configuration_with_defaults(
     assert config.mqtt_password == ""
     assert config.mqtt_base_topic == "polestar2"
     assert config.mqtt_topic_mapping_file == DEFAULT_MQTT_TOPIC_MAPPING_FILE
+    assert config.mqtt_topic_state_file.as_posix() == "/local-files/mqtt_topic_state.json"
     assert config.openwb_publish is False
     assert config.openwb_host == "localhost"
     assert config.openwb_port == 1883
