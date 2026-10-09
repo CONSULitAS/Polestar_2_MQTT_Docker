@@ -1,6 +1,6 @@
 # Tasks: Migration auf die offizielle Polestar Data Portal API
 
-Diese Taskliste setzt das [MVP-Konzept](MVP-offizielle-Data-Portal-API.md) für Login und SoC-Abruf um. Die Reihenfolge berücksichtigt technische Abhängigkeiten. M8 liefert den funktionalen End-to-End-Nachweis; abgeschlossen ist die Migration nach der anschließenden Bereinigung in M9. M10 ergänzt danach optional die Home-Assistant-Autokonfiguration und blockiert den MVP-Abschluss nicht.
+Diese Taskliste setzt das [MVP-Konzept](MVP-offizielle-Data-Portal-API.md) für Login, OpenAPI-gesteuerte Lesezugriffe, dynamische MQTT-Ausgabe und die besondere SoC-Verarbeitung um. Die Reihenfolge berücksichtigt technische Abhängigkeiten. M8 liefert den funktionalen End-to-End-Nachweis; abgeschlossen ist die Migration nach der anschließenden Bereinigung in M9. M10 ergänzt danach optional die Home-Assistant-Autokonfiguration und blockiert den MVP-Abschluss nicht.
 
 **QS-Ergänzungen vom 17.09.2026:** Dokumentierte Fortschritte und Nachweise bleiben
 erhalten; ergänzende Prüfungen werden als neue offene Aufgaben geführt. Für die
@@ -34,7 +34,7 @@ verwaltete Betriebs- und Statusschnittstelle bleibt erhalten.
 
 ## M1 – Projektstruktur und Testbasis vorbereiten
 
-**Priorität:** Hoch  
+**Priorität:** Hoch
 **Abhängigkeiten:** keine
 
 - [x] Zielstruktur mit getrennten Modulgrenzen für Konfiguration, Polestar-API, MQTT-Publisher und Programmsteuerung anlegen; die Implementierungen werden in M2 sowie M4–M7 schrittweise aus dem Monolithen übernommen.
@@ -180,10 +180,42 @@ API ausgeführt. Beide Läufe bestätigten eine autorisierte VIN und denselben, 
 realen Fahrzeug verifizierten SoC. Credentials, Token, VIN und Messwert werden
 in diesem Nachweis nicht gespeichert.
 
+## M5B – OpenAPI-gesteuerter Endpoint-Katalog und generischer Abruf
+
+**Priorität:** Hoch
+**Abhängigkeiten:** M5
+
+Ziel ist, die dokumentierten lesenden Fahrzeugendpunkte nicht einzeln im Code
+zu verdrahten. Die OpenAPI-Spezifikation liefert Pfade, erforderliche Scopes und
+Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
+
+- [ ] Die versionierte Spezifikation aus dem Repository-Root nach `api/Polestar_DataPortalAPI.json` verschieben und beim Image-Build als gebündelten Fallback mitnehmen.
+- [ ] Optional `/local-files/Polestar_DataPortalAPI.json` als lokale Aktualisierung verwenden; fehlt sie, gilt die gebündelte Spezifikation. Eine Aktualisierung ist ein bewusster administrativer Vorgang, kein automatischer Download zur Laufzeit.
+- [ ] OpenAPI-Datei beim Containerstart einmal laden und Syntax, OpenAPI-Version sowie benötigte Strukturen validieren; Änderungen werden erst nach einem Container-Neustart wirksam.
+- [ ] Ausschließlich `GET`-Operationen unter `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/` in den Endpoint-Katalog aufnehmen. Token-, Fahrzeuglisten-, Schreib- und unbekannte Pfade bleiben explizite Programmlogik beziehungsweise werden abgelehnt.
+- [ ] Die `servers`-URL einer ausgetauschten Spezifikation niemals ungeprüft als Request-Ziel übernehmen; die validierte `POLESTAR_API_BASE_URL` bleibt maßgeblich.
+- [ ] Je Operation Pfadtemplate, fachlichen Topic-Wurzelpfad, `x-required-scopes`, Beschreibung und optionale `x-supported-models` erfassen; `{vin}` ausschließlich über die vorhandene VIN-Validierung und sichere Pfadkodierung einsetzen.
+- [ ] Alle für die aktivierten Endpunkte benötigten Scopes deduplizieren, deterministisch sortieren und als leerzeichenseparierten Scope-String beim Token-Endpunkt anfordern.
+- [ ] Eine optionale Endpunktauswahl beziehungsweise Ausschlussliste vorsehen, insbesondere damit sensible Daten wie `telemetry/location` bewusst deaktiviert werden können; unbekannte Einträge beim Start ablehnen.
+- [ ] Einen generischen GET-Abruf implementieren und den Endpoint-Katalog pro Polling-Zyklus sequenziell abarbeiten, ohne pro dokumentiertem Endpunkt eine eigene Client-Methode anzulegen.
+- [ ] Erfolgreiche Antworten je Endpunkt unter einer aus dem Pfad abgeleiteten Wurzel publizierbar machen, beispielsweise `/telemetry/battery` unter `<base>/telemetry/battery`; `data` und `meta` bleiben Bestandteil des dynamischen Baums.
+- [ ] Fehler je Endpunkt isolieren: Ein nicht unterstützter oder vorübergehend fehlerhafter Endpunkt darf andere Endpunkte desselben Zyklus nicht blockieren. Retained-Bereinigung nur für einen fachlich erfolgreich und gültig verarbeiteten Endpunkt ausführen.
+- [ ] `404 DATA_NOT_AVAILABLE`, modellabhängig nicht unterstützte Endpunkte und temporäre Transport-/Serverfehler getrennt behandeln; `x-supported-models` nur als Hinweis verwenden, solange das Fahrzeugmodell nicht verlässlich bekannt ist.
+- [ ] Battery-SoC als besondere fachliche Ableitung für Validierung, openWB und Kompatibilitäts-Mapping beibehalten, obwohl Transport und dynamische MQTT-Ausgabe generisch werden.
+- [ ] Unit-Tests mit veränderten synthetischen OpenAPI-Dateien ergänzen: neuer kompatibler GET-Endpunkt ohne Codeänderung, ungültige beziehungsweise gefährliche Pfade, Scope-Aggregation, Endpoint-Auswahl und isolierte Teilfehler.
+- [ ] Einen lokalen und anschließend containerisierten Live-QS-Lauf über den generischen Katalog durchführen; aufgerufene Endpunktnamen und Ergebnisse dokumentieren, aber keine VIN, Position, Tokens oder vollständigen Fahrzeugdaten speichern.
+
+**Abnahme:** Ein kompatibler neuer lesender Fahrzeugendpunkt wird allein durch
+Austausch der validierten OpenAPI-Datei in Scope-Anforderung, Abrufschleife und
+dynamischen MQTT-Baum aufgenommen. Fehler eines Endpunkts beeinträchtigen die
+übrigen Abrufe nicht. Änderungen an Authentifizierung, HTTP-Methode,
+Sicherheitsgrenzen oder inkompatiblen Antwortverträgen bleiben bewusste
+Codeänderungen.
+
 ## M6 – MQTT- und openWB-Ausgabe migrieren
 
 **Priorität:** Hoch  
-**Abhängigkeiten:** M3, M5
+**Abhängigkeiten:** M3, M5B
 
 ### M6.1 – Dynamische Topics und Mapping-Vertrag
 
@@ -445,10 +477,41 @@ Es wurde kein Container gebaut oder gestartet.
 
 **Abnahme:** Das neue Image startet anhand der versionierten Beispielkonfiguration; Login, VIN-Prüfung, SoC-MQTT-Publikation und Ablaufwarnung funktionieren im E2E-Test.
 
+## M8A – Security Hardening und Release-Gate
+
+**Priorität:** Hoch
+**Abhängigkeiten:** erfolgreicher M8-End-to-End-Test
+
+Dieser Meilenstein trennt den einmaligen Sicherheitsreview des neuen Codes von
+wiederholbaren Prüfungen, die zukünftig jeden Pull Request und regelmäßige
+Wartungszyklen absichern. Die automatisierten Prüfungen laufen ohne echte
+Polestar-, MQTT- oder openWB-Credentials; der lokale E2E-Test bleibt ein
+separater, bewusst freigegebener Betriebsnachweis.
+
+- [ ] Einen dokumentierten manuellen Security-Code-Review für `src/polestar_mqtt/`, Dockerfile, Compose-Dateien und GitHub-Workflows durchführen. Prüfen: keine Shell-/`eval`-/`exec`-Aufrufe, keine unsicheren Deserialisierer, keine unkontrollierten Dateipfade, keine unredigierten Exceptions sowie korrekte Fehler- und Berechtigungsgrenzen.
+- [ ] Einen kurzen Threat-Model-Nachweis erstellen: Credentials und Tokens, VIN und Location, lokale OpenAPI-/CSV-Dateien, MQTT-Broker, Container-Zustandsdateien, GitHub Actions und Container-Registry als Schutzgüter beziehungsweise Angriffsflächen erfassen.
+- [ ] Negativtests für manipulierte OpenAPI-Dateien, CSV-Mappings, MQTT-Topic-Namen, Dateipfade und Redaction ergänzen; insbesondere SSRF über `servers`, Schreiboperationen, Wildcards, NUL, Pfad-Traversal und vertrauliche Werte in Fehlermeldungen abdecken.
+- [ ] Ein deterministisches `security_tests.sh` für die lokale und CI-Ausführung einführen. Es führt mindestens Ruff, die Unit-Tests und die statische Python-Sicherheitsanalyse mit Bandit aus und benötigt keine echten Laufzeit-Credentials.
+- [ ] `pip-audit` gegen Runtime- und Development-Requirements ergänzen; bekannte Findings mit Begründung zeitlich begrenzt dokumentieren, neue nicht akzeptierte CVEs lassen den Check fehlschlagen.
+- [ ] Einen Container-/Filesystem-Scan des gebauten Images, beispielsweise mit Trivy, ergänzen und den Umgang mit Findings sowie das Basisimage-Update dokumentieren.
+- [ ] Einen Secret-Scan des Arbeitsbaums und der Git-Historie, beispielsweise mit Gitleaks, durchführen; echte Fundstellen rotieren oder aus der Historie nach einem abgestimmten Incident-Verfahren entfernen.
+- [ ] GitHub Code Scanning mit CodeQL für Python und GitHub-Actions aktivieren; auf Pull Requests, Pushes nach `main` und zeitgesteuert mindestens wöchentlich ausführen. Die Verfügbarkeit hängt bei privaten Repositories von GitHub Code Security ab.
+- [ ] Die GitHub Dependency-Review-Action für Pull Requests aktivieren und neue verwundbare Runtime- oder Development-Dependencies nach einer festgelegten Schweregrenze blockieren.
+- [ ] Dependabot für `pip`, Docker und `github-actions` mit wöchentlichem Rhythmus einrichten. Update-PRs zunächst nicht automatisch mergen; sie durchlaufen die regulären Tests und Security-Gates.
+- [ ] Bestehende GitHub-Actions auf vollständige, geprüfte Commit-SHAs pinnen und pro Workflow beziehungsweise Job minimale `permissions` festlegen. Build ohne Push von Publish-Jobs mit Registry-Secrets trennen.
+- [ ] Branch Protection so konfigurieren, dass Tests, Lint, Security-Checks und Dependency Review vor dem Merge nach `main` erforderlich sind.
+- [ ] Den einmaligen Security-Review, Toolversionen, Findings, akzeptierte Restrisiken und das konkrete Scan-Ergebnis ohne vertrauliche Daten dokumentieren.
+
+**Abnahme:** Der neue Code, das Image und die CI-Konfiguration sind manuell
+reviewt. Wiederholbare lokale und GitHub-Prüfungen erkennen Code-, Dependency-,
+Secret-, Container- und Workflow-Risiken frühzeitig. Nicht akzeptierte Findings
+blockieren einen Merge oder Release; Ausnahmen sind nachvollziehbar und zeitlich
+begrenzt dokumentiert.
+
 ## M9 – Alten API-Code entfernen und Migration abschließen
 
 **Priorität:** Hoch  
-**Abhängigkeiten:** erfolgreicher M8-End-to-End-Test
+**Abhängigkeiten:** erfolgreicher M8A-Security- und Release-Gate
 
 - [ ] Polestar-ID-, PKCE- und Benutzer-Login-Code entfernen.
 - [ ] Refresh-Token-Code entfernen.
@@ -496,10 +559,11 @@ funktioniert unabhängig davon weiter. Die Umsetzung dieses Meilensteins ist off
 
 ## Nicht Teil dieses MVP
 
-- weitere Telemetriedomänen wie Odometer, Location, Exterior oder Health
 - Charging-Schreiboperationen
 - Delegation über `x-delegated-account-id`
 - automatische Erstellung oder Rotation des Client Secrets
+- automatischer Download oder ungeprüfte Aktivierung einer OpenAPI-Datei zur Laufzeit
+- automatische Unterstützung inkompatibler Änderungen an Authentifizierung, HTTP-Methoden oder Antwortverträgen allein durch Austausch der OpenAPI-Datei
 - persistente Speicherung bereits ausgegebener Ablaufwarnungen
 - automatische Auswahl einer VIN bei mehreren Fahrzeugen
 - garantierte Rückwärtskompatibilität zu Legacy-Telemetrie-Topics oder automatische Aktivierung des Beispiel-Mappings

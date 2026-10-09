@@ -6,10 +6,14 @@ Der erste Rewrite-Schritt ersetzt die bisherige inoffizielle Polestar-ID-/GraphQ
 
 1. sich per OAuth2 Client Credentials authentifizieren,
 2. die Berechtigung für die konfigurierte VIN prüfen,
-3. den Batterie-SoC zyklisch abrufen,
-4. den SoC weiterhin über MQTT und optional an openWB veröffentlichen.
+3. die lesenden Fahrzeugendpunkte aus einer validierten OpenAPI-Spezifikation ermitteln,
+4. die aktivierten Telemetrie- und Charging-Endpunkte zyklisch generisch abrufen,
+5. deren JSON-Antworten dynamisch über MQTT veröffentlichen und den validierten Batterie-SoC optional an openWB weiterreichen.
 
-Nicht Teil des MVP sind weitere Telemetriedomänen, Fahrzeug-Stammdaten, Schreiboperationen, eine automatische Migration aller bisherigen MQTT-Felder und Third-Party-Delegation. Die Architektur soll diese Erweiterungen danach ohne erneuten Umbau ermöglichen.
+Nicht Teil des MVP sind Schreiboperationen, eine automatische Migration aller
+bisherigen MQTT-Felder, Third-Party-Delegation sowie die ungeprüfte automatische
+Übernahme beliebiger OpenAPI-Änderungen. Kompatible neue lesende Fahrzeugendpunkte
+sollen dagegen ohne neue endpunktspezifische Programmlogik übernommen werden.
 
 ## Ausgangslage und API-Vertrag
 
@@ -19,9 +23,10 @@ Die bisherige Implementierung simuliert einen Benutzer-Login mit E-Mail, Passwor
 - Authentifizierung: `POST /token` mit `clientId`, `clientSecret` und optionalem `scope`
 - Token-Antwort: `accessToken`, `expiresIn`, `tokenType`; es gibt laut Spezifikation keinen Refresh-Token
 - Fahrzeugliste: `GET /v1/vehicles`
-- SoC: `GET /v1/vehicles/{vin}/telemetry/battery`
+- Fachliche Fahrzeugdaten: dokumentierte `GET`-Operationen unter `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/`
 - Pflicht-Header an den fachlichen Endpunkten: `Authorization: Bearer ...` und `x-client-id: <Account-ID>`
-- Für Battery ist der Scope `pdp-telemetry/battery` erforderlich.
+- Die erforderlichen Scopes stehen je Operation in `x-required-scopes`; der Token-Endpunkt akzeptiert mehrere Scopes als leerzeichenseparierten String.
+- Die mitgelieferte OpenAPI-3.1-Datei ist Quelle für Endpoint-Katalog und Scopes, nicht für eine ungeprüfte Änderung der konfigurierten Basis-URL.
 - Der gesuchte Wert steht in `data.batteryChargeLevelPercentage`. Alle Telemetriefelder außer `vin` können fehlen.
 - Rate Limit: maximal 10.000 Aufrufe pro Client und Tag.
 
@@ -35,20 +40,24 @@ Die bisherige monolithische Datei sollte beim Rewrite in kleine Verantwortungsbe
 Konfiguration
      |
      v
-TokenProvider ----> POST /token
+OpenAPI-Katalog ----> validierte GET-Pfade und Scopes
+     |
+     v
+TokenProvider ------> POST /token mit aggregierten Scopes
      |
      v
 PolestarDataPortalClient ----> GET /v1/vehicles
-     |                         GET /v1/vehicles/{vin}/telemetry/battery
+     |                         GET-Schleife über aktivierte Fahrzeugendpunkte
      v
-SoC-Anwendungsdienst
-     |-----------------------> MQTT
-     `-----------------------> openWB (optional)
+Dynamischer JSON-Publisher ----> MQTT
+     |
+     `------------------------> SoC-Fachableitung und openWB (optional)
 ```
 
 Empfohlene Module:
 
 - `config.py`: Umgebungsvariablen lesen und beim Start vollständig validieren
+- `openapi_catalog.py`: lokale beziehungsweise gebündelte Spezifikation validieren und sichere GET-Operationen samt Scopes katalogisieren
 - `polestar_api.py`: Token-Lebenszyklus, HTTP-Aufrufe, Timeouts und Fehlerabbildung
 - `publisher.py`: MQTT- und openWB-Ausgabe
 - `main.py`: Start, Fahrzeugprüfung und Polling-Schleife
@@ -67,6 +76,8 @@ Neue Variablen:
 | `POLESTAR_ACCOUNT_ID` | ja | Wert für den Header `x-client-id` |
 | `POLESTAR_VIN` | ja | abzurufendes Fahrzeug |
 | `POLESTAR_API_BASE_URL` | nein | überschreibbare Basis-URL, standardmäßig die dokumentierte M2M-URL |
+| `POLESTAR_OPENAPI_FILE` | nein | optionale lokale OpenAPI-Datei; standardmäßig `/local-files/Polestar_DataPortalAPI.json`, mit gebündeltem Fallback unter `api/`; sie wird einmal beim Containerstart geladen |
+| `POLESTAR_API_ENDPOINTS` | nein | optionale Auswahl oder Ausschlussliste für katalogisierte GET-Endpunkte; sensible Endpunkte wie Location können damit deaktiviert werden |
 | `POLESTAR_CYCLE` | nein | Polling-Intervall, zunächst weiterhin 270 Sekunden |
 | `POLESTAR_DELEGATED_ACCOUNT_ID` | nein/später | optionaler Header für Third-Party-Credentials; nicht MVP |
 
@@ -103,26 +114,30 @@ Ist das Secret bereits abgelaufen, wird der Zustand deutlich publiziert und jede
 ### 1. Start und Authentifizierung
 
 1. Konfiguration validieren; bei fehlenden Pflichtwerten mit einer eindeutigen Meldung abbrechen.
-2. `POST /token` als JSON oder Form-Body senden:
+2. Lokale OpenAPI-Datei verwenden, sofern vorhanden, andernfalls den gebündelten Fallback laden. Die Datei wird einmal beim Containerstart validiert und katalogisiert; eine Änderung wird erst nach einem Container-Neustart wirksam. Nur validierte GET-Operationen innerhalb der erlaubten Fahrzeugpfade katalogisieren.
+3. Scopes aller aktivierten Operationen deduplizieren und deterministisch als leerzeichenseparierten String bilden.
+4. `POST /token` als JSON oder Form-Body senden:
 
    ```json
    {
      "clientId": "...",
      "clientSecret": "...",
-     "scope": "pdp-telemetry/battery"
+     "scope": "pdp-charging/targetSoc pdp-telemetry/battery ..."
    }
    ```
 
-3. `accessToken` nur im Speicher halten. Ablaufzeit als monotone Frist aus `expiresIn` berechnen und eine Sicherheitsmarge von 60 Sekunden abziehen.
-4. Es gibt keinen Refresh-Flow: vor Ablauf wird mit denselben Client Credentials ein neues Token angefordert.
+5. `accessToken` nur im Speicher halten. Ablaufzeit als monotone Frist aus `expiresIn` berechnen und eine Sicherheitsmarge von 60 Sekunden abziehen.
+6. Es gibt keinen Refresh-Flow: vor Ablauf wird mit denselben Client Credentials und dem unveränderten aktiven Scope-Satz ein neues Token angefordert.
 
 ### 2. Berechtigungsprüfung
 
 Nach erfolgreicher Authentifizierung einmal `GET /v1/vehicles` ausführen und prüfen, ob `POLESTAR_VIN` in `data` enthalten ist. Damit werden eine falsche Account-ID, fehlende Bindung und eine falsche VIN früh und verständlich erkannt. Die Liste muss nicht in jedem Polling-Zyklus erneut geladen werden.
 
-### 3. SoC-Abruf
+### 3. Generische Endpoint-Schleife und SoC-Fachableitung
 
-`GET /v1/vehicles/{vin}/telemetry/battery` mit URL-kodierter VIN und diesen Headern senden:
+Die katalogisierten Endpunkte werden sequenziell abgearbeitet. `{vin}` wird nur
+in den validierten Pfadtemplates durch die URL-kodierte konfigurierte VIN ersetzt.
+Jeder Request verwendet diese Header:
 
 ```http
 Authorization: Bearer <accessToken>
@@ -130,7 +145,14 @@ x-client-id: <POLESTAR_ACCOUNT_ID>
 Accept: application/json
 ```
 
-Die Antwort wird strikt, aber tolerant ausgewertet:
+Eine erfolgreiche JSON-Antwort wird unter einer aus dem API-Pfad abgeleiteten
+MQTT-Wurzel publiziert, beispielsweise `/telemetry/battery` unter
+`<base>/telemetry/battery`. Fehler werden je Endpunkt isoliert; ein Fehler bei
+Location oder Charging darf Battery und die übrigen Endpunkte nicht blockieren.
+Retained-Bereinigung erfolgt nur für einen fachlich erfolgreich verarbeiteten
+Endpunkt.
+
+Battery behält zusätzliche Fachlogik:
 
 - `data.batteryChargeLevelPercentage` vorhanden und numerisch: Wert im Bereich 0 bis 100 publizieren.
 - Feld fehlt: kein alter SoC darf als frisch ausgegeben werden; Warnung und Fehler-/Statuszustand publizieren.
@@ -147,17 +169,23 @@ Die Antwort wird strikt, aber tolerant ausgewertet:
 - Nach Fehlern Prozess und MQTT-Verbindung weiterlaufen lassen. Das aktuelle Muster `wait_and_die()` soll nicht übernommen werden.
 - Keine Tokens, Secrets oder vollständigen Response-Header loggen. Fehlerantworten nur redigiert protokollieren.
 
-Das bestehende Intervall von 270 Sekunden erzeugt rund 320 Battery-Aufrufe pro Tag und liegt weit unter dem Limit. Token- und einmaliger Vehicle-Aufruf kommen hinzu. Ein Intervall unter 10 Sekunden sollte durch Validierung verhindert werden, weil bereits ein einzelner dauerhaft laufender Abruf sonst das Tageslimit überschreiten kann.
+Das bestehende Intervall von 270 Sekunden erzeugt rund 320 Zyklen pro Tag. Bei
+15 aktivierten fachlichen GET-Endpunkten sind das rund 4.800 Aufrufe zuzüglich
+Token- und Fahrzeuglistenabrufen und damit weiterhin weniger als 10.000 Aufrufe
+pro Client und Tag. Die tatsächliche Zahl aktivierter Endpunkte muss in die
+Rate-Limit-Bewertung einfließen; ein Intervall unter 10 Sekunden bleibt unzulässig.
 
-## MQTT-Kompatibilität
+## Dynamische MQTT-Ausgabe und optionale Kompatibilität
 
-Der wichtigste bestehende Consumer (`Node-RED_interface.json`) hört auf:
+Die JSON-Struktur jedes erfolgreichen Endpunkts wird ohne feste Feldliste
+rekursiv in MQTT-Topics aufgelöst. Dadurch erscheinen neue Antwortfelder und
+kompatible neue Endpunkte automatisch. Topic-Änderungen gegenüber der früheren
+GraphQL-Struktur sind bewusst zulässig.
 
-```text
-<MQTT_BASE_TOPIC>/carTelematics/battery/batteryChargeLevelPercentage
-```
-
-Dieser Topic-Vertrag sollte im MVP unverändert bleiben, obwohl die Quelle jetzt REST statt GraphQL ist. Dadurch müssen Node-RED und openWB für den API-Wechsel nicht gleichzeitig migriert werden. Der numerische Payload bleibt ebenfalls unverändert.
+Abwärtskompatibilität und spezielle Zielsysteme werden über die optionale lokale
+CSV-Datei `/local-files/mqtt_topic_mapping.csv` als zusätzliche Ausgaben
+konfiguriert. Ein Quellwert kann auf mehrere Ziel-Topics geschrieben werden;
+die dynamischen Standard-Topics bleiben stets erhalten.
 
 Zusätzlich empfohlen:
 
@@ -201,19 +229,26 @@ Ergebnis: Der dokumentierte Vertrag funktioniert mit den echten Credentials; off
 - Konfigurationsmodell und Startvalidierung implementieren.
 - Ablaufdatum des Client Secrets parsen, validieren und über Log/MQTT überwachen.
 - `TokenProvider` mit Ablaufmarge und Re-Login implementieren.
-- `list_vehicles()` und `get_battery(vin)` implementieren.
-- Unit-Tests mit gemockten HTTP-Antworten für Erfolg, fehlenden SoC, abgelaufenes Token, `401`, `403`, `404`, `429` und `503` ergänzen.
+- `list_vehicles()` und zunächst `get_battery(vin)` implementieren.
+- OpenAPI-Katalog mit sicherer Pfad-Allowlist, Scope-Aggregation, lokaler Aktualisierung und gebündeltem Fallback ergänzen.
+- Generischen GET-Abruf und eine fehlertolerante Endpoint-Schleife implementieren; Battery-Fachvalidierung separat beibehalten.
+- Unit-Tests mit synthetisch veränderten OpenAPI-Dateien und gemockten HTTP-Antworten für neue Endpunkte, gefährliche Pfade, Teilerfolg, fehlenden SoC, abgelaufenes Token, `401`, `403`, `404`, `429` und `503` ergänzen.
 
-Ergebnis: Die offizielle API kann ohne MQTT reproduzierbar angesprochen und getestet werden.
+Ergebnis: Die offizielle API kann ohne MQTT reproduzierbar angesprochen werden;
+ein kompatibler neuer GET-Endpunkt benötigt keine neue endpunktspezifische
+Client-Methode.
 
 ### Phase 2: MQTT-/openWB-Integration
 
-- SoC auf den bestehenden MQTT-Topic abbilden.
+- JSON-Antworten je Endpunkt dynamisch unter einer aus dem API-Pfad abgeleiteten Topic-Wurzel veröffentlichen.
+- Optionale CSV-Mappings für zusätzliche Kompatibilitäts- und Zielsystem-Topics anwenden.
 - Change Detection beibehalten; Statuszeitpunkt trotzdem korrekt behandeln.
 - openWB-Ausgabe gegen fehlenden oder ungültigen SoC absichern.
 - Fehlerstatus und Logging ergänzen.
 
-Ergebnis: Bestehende Verbraucher erhalten den SoC ohne Topic-Änderung.
+Ergebnis: Neue Endpunkte und Felder erscheinen automatisch; bestehende
+Verbraucher können bei Bedarf über lokale zusätzliche Mappings weiter versorgt
+werden.
 
 ### Phase 3: Container und Dokumentation
 
@@ -222,10 +257,15 @@ Ergebnis: Bestehende Verbraucher erhalten den SoC ohne Topic-Änderung.
 - Die ignorierte lokale `docker-compose.yml` ausschließlich für den End-to-End-Test verwenden und nicht als auszuliefernde Konfiguration behandeln.
 - Den bestehenden Workflow `.github/workflows/docker-image.yml` für Build und Veröffentlichung des neuen Images verifizieren.
 - README und Synology-Anleitung aktualisieren.
+- Gebündelte OpenAPI-Datei unter `api/` in das Image aufnehmen und den lokalen Override unter `local-files` dokumentieren.
 - Alten E-Mail-/Passwort-, PKCE-, Refresh-Token- und GraphQL-Code entfernen.
 - Container lokal mit HTTP-Mocks testen; danach manueller Smoke-Test mit echten Credentials.
+- Vor dem Release einen manuellen Security-Code-Review sowie automatisierte
+  Code-, Dependency-, Secret-, Container- und GitHub-Workflow-Scans als
+  verpflichtendes Gate durchführen.
 
-Ergebnis: Ein schlankes, dokumentiertes MVP-Image ohne Abhängigkeit von der inoffiziellen API.
+Ergebnis: Ein schlankes, dokumentiertes und gehärtetes MVP-Image ohne
+Abhängigkeit von der inoffiziellen API.
 
 ## Tests und Abnahmekriterien
 
@@ -234,9 +274,12 @@ Der MVP ist abgenommen, wenn:
 - der Container ausschließlich mit offiziellen API-Credentials startet,
 - ein fehlendes oder ungültiges Secret-Ablaufdatum den Start mit einer verständlichen Konfigurationsmeldung verhindert,
 - die Anwendung bei 30, 14, 7, 3, 1 und 0 verbleibenden Tagen eine entprellte Warnung erzeugt und den Credential-Status retained über MQTT bereitstellt,
-- ein Token mit minimalem Battery-Scope bezogen und vor Ablauf erneuert wird,
+- ein Token mit genau den deduplizierten Scopes der aktivierten katalogisierten Endpunkte bezogen und vor Ablauf erneuert wird,
 - eine nicht autorisierte VIN bereits beim Start verständlich gemeldet wird,
-- ein erfolgreicher Abruf den SoC retained mit QoS 1 auf dem bisherigen Topic publiziert,
+- ein synthetisch ergänzter kompatibler GET-Endpunkt ohne Codeänderung katalogisiert, abgerufen und dynamisch publiziert wird,
+- ungültige Methoden, Pfade oder Serverangaben aus einer ausgetauschten Spezifikation nicht ungeprüft ausgeführt werden,
+- der Fehler eines einzelnen Endpunkts die übrigen Endpunkte desselben Zyklus nicht blockiert,
+- ein erfolgreicher Battery-Abruf den SoC retained mit QoS 1 dynamisch und optional über zusätzliche CSV-Mappings publiziert,
 - openWB bei aktivierter Option denselben validierten SoC erhält,
 - ein einmaliges `401` automatisch durch Token-Neubezug geheilt wird,
 - temporäre API-Ausfälle weder Credentials offenlegen noch eine enge Restart-Schleife erzeugen,
@@ -247,9 +290,12 @@ Der MVP ist abgenommen, wenn:
 
 Für den MVP empfohlen entschieden:
 
-- minimaler Scope nur `pdp-telemetry/battery`
+- Scopes werden ausschließlich aus den aktivierten, validierten OpenAPI-GET-Operationen abgeleitet und deterministisch gebündelt
+- die konfigurierte `POLESTAR_API_BASE_URL` bleibt maßgeblich; `servers` aus einer lokalen Spezifikation ändert das Request-Ziel nicht automatisch
+- kompatible lesende Fahrzeugendpunkte werden generisch verarbeitet; Schreiboperationen bleiben ausgeschlossen
+- sensible Endpunkte wie Location können über die Endpunktauswahl deaktiviert werden
 - VIN bleibt explizite Konfiguration; `/v1/vehicles` dient der Validierung
-- bestehender SoC-MQTT-Topic bleibt kompatibel
+- dynamische Topics folgen der REST-JSON-Struktur; zusätzliche Kompatibilität ist Aufgabe des lokalen CSV-Mappings
 - Token und Secret werden nicht persistent gespeichert
 - das bekannte Secret-Ablaufdatum wird konfiguriert und überwacht; es wird nicht mit der Access-Token-Ablaufzeit verwechselt
 - Polling bleibt standardmäßig bei 270 Sekunden
