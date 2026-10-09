@@ -18,6 +18,16 @@ Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar 
 
 ## Task-Tracking
 - Projektaufgaben und Status werden in `TASKS.md` gepflegt: siehe [TASKS.md](TASKS.md).
+- Chronologische Listen immer mit datierten Einträgen (Format: YYYY-MM-DD:) führen, neueste zuerst; bei Zeiträumen zählt das Enddatum.
+
+## Umgang mit Git
+- Vor Änderungen `git status --short` prüfen; vorhandene Änderungen und deren Staging-Zustand erhalten.
+- Versionierte Dateien ausschließlich mit `git mv` verschieben oder umbenennen, niemals per `mv` oder Kopieren/Löschen. Das dabei entstehende Staging ist beabsichtigt.
+- Beauftragte Löschungen versionierter Dateien mit `git rm` ausführen; keine fremden Änderungen verwerfen.
+- Nur aufgabenbezogene Dateien gezielt stagen; kein pauschales `git add .` oder `git add -A`.
+- Commits, Pushes und Änderungen der Git-Historie nur im ausdrücklich beauftragten Umfang durchführen. Destruktive Befehle wie `reset --hard`, `clean` oder Force-Push benötigen ausdrückliche Freigabe.
+- Blockierte Git-Schreibzugriffe über die vorgesehene Berechtigungsfreigabe lösen; nicht durch Dateisystemoperationen umgehen.
+- Zum Abschluss Arbeitsbaum und Index prüfen: `git diff --check`, `git diff --cached --check` und `git status --short`; Umbenennungen zusätzlich mit `git diff --cached --summary` kontrollieren.
 
 ## Arbeitsrichtlinien für Mitwirkende
 - Kleine, nachvollziehbare Änderungen mit klarer Commit-Beschreibung.

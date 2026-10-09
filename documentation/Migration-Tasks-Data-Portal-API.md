@@ -190,6 +190,12 @@ zu verdrahten. Die OpenAPI-Spezifikation liefert Pfade, erforderliche Scopes und
 Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
 
 - [ ] Die versionierte Spezifikation aus dem Repository-Root nach `api/Polestar_DataPortalAPI.json` verschieben und beim Image-Build als gebündelten Fallback mitnehmen.
+  - Implementiert am 09.10.2026: Spezifikation unverändert verschoben und im
+    Dockerfile die Kopie nach `/app/api/Polestar_DataPortalAPI.json` ergänzt.
+    JSON-Syntax und Bytegleichheit gegenüber der bisherigen versionierten Datei
+    sind geprüft. Der Image-Build konnte wegen eines nicht erreichbaren
+    Docker-Daemons (fehlender Socket) nicht ausgeführt werden; Build und
+    Lesbarkeit der Datei im Container bleiben als Abnahmenachweis offen.
 - [ ] Optional `/local-files/Polestar_DataPortalAPI.json` als lokale Aktualisierung verwenden; fehlt sie, gilt die gebündelte Spezifikation. Eine Aktualisierung ist ein bewusster administrativer Vorgang, kein automatischer Download zur Laufzeit.
 - [ ] OpenAPI-Datei beim Containerstart einmal laden und Syntax, OpenAPI-Version sowie benötigte Strukturen validieren; Änderungen werden erst nach einem Container-Neustart wirksam.
 - [ ] Ausschließlich `GET`-Operationen unter `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/` in den Endpoint-Katalog aufnehmen. Token-, Fahrzeuglisten-, Schreib- und unbekannte Pfade bleiben explizite Programmlogik beziehungsweise werden abgelehnt.

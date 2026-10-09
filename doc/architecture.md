@@ -38,6 +38,10 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 - ENV-gesteuerte MQTT-/OpenWB-Parameter via Docker Compose
 
 ## Grenzen der OpenAPI-Steuerung
+- Die versionierte Spezifikation liegt unter `api/Polestar_DataPortalAPI.json`
+  und wird beim Image-Build nach `/app/api/Polestar_DataPortalAPI.json` kopiert.
+  Das Laden und die Auswahl des lokalen Overrides werden erst in den folgenden
+  M5B-Schritten implementiert.
 - Automatisch übernommen werden nur kompatible `GET`-Operationen unter den
   freigegebenen Telemetrie- und Charging-Pfaden.
 - Token- und Fahrzeuglistenabruf sowie VIN-, SoC- und Sicherheitsvalidierung

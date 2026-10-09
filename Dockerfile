@@ -12,6 +12,7 @@ ENV PATH="/app/venv/bin:$PATH"
 
 # Kopieren des Python-Skripts und der Requirements nach WORKDIR
 COPY src ./
+COPY api/Polestar_DataPortalAPI.json ./api/Polestar_DataPortalAPI.json
 
 # Python Virtualenv einrichten
 # Basissystem aktualisieren
