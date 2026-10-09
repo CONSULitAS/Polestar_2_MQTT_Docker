@@ -8,7 +8,8 @@ from time import monotonic
 
 import paho.mqtt.client as mqtt
 
-from polestar_mqtt.config import DataPortalConfig
+from polestar_mqtt.config import ConfigurationError, DataPortalConfig
+from polestar_mqtt.openapi_catalog import load_openapi_document
 from polestar_mqtt.polestar_api import DataPortalClient, DataPortalHttpClient, TokenProvider
 from polestar_mqtt.publisher import load_topic_mapping, publish_json_topics, validate_publish_topic
 
@@ -45,6 +46,7 @@ class ConfirmedPublisher:
 def run_once(config: DataPortalConfig) -> int:
     """Fetch one valid Battery snapshot and publish to the configured broker."""
 
+    load_openapi_document(config.openapi_file)
     mapping = load_topic_mapping(config.mqtt_topic_mapping_file, config.mqtt_base_topic)
     root = f"{config.mqtt_base_topic.rstrip('/')}/telemetry/battery"
     validate_publish_topic(root)
@@ -101,6 +103,9 @@ def main() -> int:
         return 2
     try:
         count = run_once(config)
+    except ConfigurationError:
+        print("Data Portal runonce: invalid file configuration")
+        return 2
     except Exception as error:
         # Transport exceptions can contain credentials, URLs or response data.
         print(f"Data Portal runonce failed ({type(error).__name__})")

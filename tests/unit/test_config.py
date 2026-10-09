@@ -9,6 +9,7 @@ import pytest
 from polestar_mqtt.config import (
     DEFAULT_MQTT_TOPIC_MAPPING_FILE,
     DEFAULT_POLESTAR_API_BASE_URL,
+    DEFAULT_POLESTAR_OPENAPI_FILE,
     REDACTED_VALUE,
     ConfigurationError,
     DataPortalConfig,
@@ -39,6 +40,7 @@ def test_loads_valid_configuration_with_defaults(
     assert config.account_id == "12345678-1234-1234-1234-123456789abc"
     assert config.vin == "LPSVS000000000000"
     assert config.api_base_url == DEFAULT_POLESTAR_API_BASE_URL
+    assert config.openapi_file == DEFAULT_POLESTAR_OPENAPI_FILE
     assert config.timezone == "Europe/Berlin"
     assert config.polestar_cycle == 270
     assert config.mqtt_broker == "localhost"
@@ -55,11 +57,21 @@ def test_loads_valid_configuration_with_defaults(
     assert config.openwb_lp_num == 1
 
 
+@pytest.mark.parametrize("value", ["", "   "])
+def test_empty_openapi_path_uses_default(valid_environment, value):
+    config = DataPortalConfig.from_environment(
+        {**valid_environment, "POLESTAR_OPENAPI_FILE": value}
+    )
+
+    assert config.openapi_file == DEFAULT_POLESTAR_OPENAPI_FILE
+
+
 def test_loads_runtime_overrides(valid_environment: dict[str, str]) -> None:
     config = DataPortalConfig.from_environment(
         {
             **valid_environment,
             "POLESTAR_API_BASE_URL": "https://example.invalid/m2m",
+            "POLESTAR_OPENAPI_FILE": "local-files/custom-api.json",
             "TZ": "UTC",
             "POLESTAR_CYCLE": "300",
             "MQTT_BROKER": "mqtt.example.invalid",
@@ -77,6 +89,7 @@ def test_loads_runtime_overrides(valid_environment: dict[str, str]) -> None:
     )
 
     assert config.api_base_url == "https://example.invalid/m2m"
+    assert config.openapi_file.as_posix() == "local-files/custom-api.json"
     assert config.client_secret_expires_at.isoformat() == "2026-12-15T00:00:00+00:00"
     assert config.polestar_cycle == 300
     assert (config.mqtt_broker, config.mqtt_port, config.mqtt_keepalive) == (

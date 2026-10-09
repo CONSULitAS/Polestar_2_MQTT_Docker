@@ -40,8 +40,26 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 ## Grenzen der OpenAPI-Steuerung
 - Die versionierte Spezifikation liegt unter `api/Polestar_DataPortalAPI.json`
   und wird beim Image-Build nach `/app/api/Polestar_DataPortalAPI.json` kopiert.
-  Das Laden und die Auswahl des lokalen Overrides werden erst in den folgenden
-  M5B-Schritten implementiert.
+  `select_openapi_file()` in `openapi_catalog.py` wählt die über
+  `POLESTAR_OPENAPI_FILE` konfigurierte lokale Datei (Standard:
+  `/local-files/Polestar_DataPortalAPI.json`), andernfalls den gebündelten Fallback.
+  Relative lokale Pfade beziehen sich auf das Arbeitsverzeichnis; der gebündelte
+  Pfad ist davon unabhängig. Eine leere ENV-Angabe verwendet den Standardpfad.
+  Nur eine fehlende lokale Datei erlaubt den Fallback; Verzeichnisse, defekte
+  Symlinks und Fehler beim Dateistatus-Zugriff werden ohne Pfadausgabe abgelehnt.
+  Die Auswahl selbst lädt keine Inhalte und führt keine Downloads aus.
+- `load_openapi_document()` liest die gewählte Datei als UTF-8-JSON (BOM erlaubt)
+  und prüft OpenAPI `3.1.x`, `info.title`, `info.version`, nicht leere `paths`,
+  Pfad-/Operations-/Antwortobjekte sowie den Objekttyp optionaler `components`.
+  Doppelte JSON-Schlüssel und nicht standardkonforme Konstanten wie `NaN`
+  werden abgelehnt. Eine ungültige lokale Datei löst keinen Fallback aus.
+  Dies ist eine Grundstrukturprüfung, keine vollständige OpenAPI-Schemavalidierung.
+- Der Data-Portal-Einmallauf lädt beim Start einmal vor HTTP und MQTT; ungültige
+  Dateien führen zu Exit-Code 2 ohne Ausgabe von Dateiinhalten oder Pfaden.
+  Der geladene Snapshot wird nicht automatisch aktualisiert; eine neue Datei
+  wirkt erst beim nächsten Prozessstart. Auth-only- und SoC-Diagnose bleiben
+  unabhängig. Der dauerhafte Start-/Polling-Ablauf und die Umstellung des
+  Legacy-Container-Einstiegspunkts bleiben M7/M8 vorbehalten.
 - Automatisch übernommen werden nur kompatible `GET`-Operationen unter den
   freigegebenen Telemetrie- und Charging-Pfaden.
 - Token- und Fahrzeuglistenabruf sowie VIN-, SoC- und Sicherheitsvalidierung

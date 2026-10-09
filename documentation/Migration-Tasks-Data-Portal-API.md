@@ -189,15 +189,47 @@ Ziel ist, die dokumentierten lesenden Fahrzeugendpunkte nicht einzeln im Code
 zu verdrahten. Die OpenAPI-Spezifikation liefert Pfade, erforderliche Scopes und
 Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
 
-- [ ] Die versionierte Spezifikation aus dem Repository-Root nach `api/Polestar_DataPortalAPI.json` verschieben und beim Image-Build als gebündelten Fallback mitnehmen.
-  - Implementiert am 09.10.2026: Spezifikation unverändert verschoben und im
+- [x] Die versionierte Spezifikation aus dem Repository-Root nach `api/Polestar_DataPortalAPI.json` verschieben und beim Image-Build als gebündelten Fallback mitnehmen.
+  - 2026-10-09: Container-Nachweis auf Basis von Commit `c3e86e9` erfolgreich.
+    `docker build -t polestar2mqtt:openapi-bundle-check .` endete mit Exit-Code 0.
+    Im Image ist `/app/api/Polestar_DataPortalAPI.json` unter dem voreingestellten
+    Benutzer UID 999 lesbar und als JSON mit OpenAPI-Version `3.1.0` parsebar.
+    SHA-256 stimmt mit der Repository-Datei überein:
+    `7d06fd8d0a0e9a85a493abb0ea6d2ab5109ba11a6aa521a14a0c6cbca01f4b5d`.
+    Der Prüfcontainer lief ohne Netzwerk, Mounts oder Credentials mit
+    schreibgeschütztem Dateisystem und Exit-Code 0; die Anwendung wurde dabei
+    nicht gestartet. Der zuvor fehlende Docker-Daemon wurde gestartet.
+  - 2026-10-09: Spezifikation unverändert verschoben und im
     Dockerfile die Kopie nach `/app/api/Polestar_DataPortalAPI.json` ergänzt.
     JSON-Syntax und Bytegleichheit gegenüber der bisherigen versionierten Datei
     sind geprüft. Der Image-Build konnte wegen eines nicht erreichbaren
-    Docker-Daemons (fehlender Socket) nicht ausgeführt werden; Build und
-    Lesbarkeit der Datei im Container bleiben als Abnahmenachweis offen.
-- [ ] Optional `/local-files/Polestar_DataPortalAPI.json` als lokale Aktualisierung verwenden; fehlt sie, gilt die gebündelte Spezifikation. Eine Aktualisierung ist ein bewusster administrativer Vorgang, kein automatischer Download zur Laufzeit.
-- [ ] OpenAPI-Datei beim Containerstart einmal laden und Syntax, OpenAPI-Version sowie benötigte Strukturen validieren; Änderungen werden erst nach einem Container-Neustart wirksam.
+    Docker-Daemons (fehlender Socket) zunächst nicht ausgeführt werden;
+    der nachgeholte Abnahmenachweis steht oben.
+- [x] Optional `/local-files/Polestar_DataPortalAPI.json` als lokale Aktualisierung verwenden; fehlt sie, gilt die gebündelte Spezifikation. Eine Aktualisierung ist ein bewusster administrativer Vorgang, kein automatischer Download zur Laufzeit.
+  - 2026-10-09: `POLESTAR_OPENAPI_FILE` und `select_openapi_file()` implementiert.
+    Lokale Dateien haben Vorrang; ausschließlich fehlende Dateien erlauben den
+    gebündelten Fallback. Fehler beim Dateistatus-Zugriff, Verzeichnisse und
+    defekte Symlinks werden ohne Pfadausgabe abgelehnt. Die Inhaltsprüfung und
+    Einbindung beim Start bleiben dem folgenden Schritt vorbehalten.
+    `./run_tests.sh` bestand mit Ruff, 261 Tests und Exit-Code 0 einschließlich
+    des vom Skript gestarteten Legacy-Einmallaufs. Nach lokalem Test wurde das
+    Image neu gebaut; Fallback und lokaler Override wurden unter UID 999 ohne
+    Netzwerk mit einer synthetischen Datei im temporären Container-Dateisystem
+    geprüft (Exit-Code 0). Der Legacy-Lauf prüft nicht die neue Dateiauswahl.
+- [x] OpenAPI-Datei beim Containerstart einmal laden und Syntax, OpenAPI-Version sowie benötigte Strukturen validieren; Änderungen werden erst nach einem Container-Neustart wirksam.
+  - 2026-10-09: `load_openapi_document()` prüft UTF-8-JSON, OpenAPI `3.1.x`,
+    erforderliche Info-Felder, Pfad-/Operations-/Antwortobjekte und den Objekttyp
+    optionaler `components`. Doppelte Schlüssel und JSON-Sonderkonstanten werden
+    abgelehnt. Der Data-Portal-Einmallauf lädt genau einmal vor Netzwerkzugriffen;
+    Dateifehler liefern Exit-Code 2. Der Snapshot bleibt nach Dateiänderung stabil.
+    Der dauerhafte Start-/Polling-Ablauf und der Wechsel des noch aktiven
+    Legacy-Container-Einstiegspunkts folgen in M7/M8; keine vollständige
+    OpenAPI-Schemavalidierung oder Endpoint-Katalogisierung in diesem Schritt.
+    `./run_tests.sh`: Ruff, 284 Tests und zusätzlicher Legacy-Einmallauf erfolgreich,
+    Exit-Code 0. Danach `./run_local.sh runonce-DataPortalAPI`: API erfolgreich,
+    MQTT bestätigt, Exit-Code 0. Anschließend Loader im neu gebauten Image ohne
+    Netzwerk geprüft: Fallback, lokale Datei, stabiler Snapshot und Ablehnung
+    ungültigen JSONs erfolgreich, Exit-Code 0. Keine Fahrzeugdaten protokolliert.
 - [ ] Ausschließlich `GET`-Operationen unter `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/` in den Endpoint-Katalog aufnehmen. Token-, Fahrzeuglisten-, Schreib- und unbekannte Pfade bleiben explizite Programmlogik beziehungsweise werden abgelehnt.
 - [ ] Die `servers`-URL einer ausgetauschten Spezifikation niemals ungeprüft als Request-Ziel übernehmen; die validierte `POLESTAR_API_BASE_URL` bleibt maßgeblich.
 - [ ] Je Operation Pfadtemplate, fachlichen Topic-Wurzelpfad, `x-required-scopes`, Beschreibung und optionale `x-supported-models` erfassen; `{vin}` ausschließlich über die vorhandene VIN-Validierung und sichere Pfadkodierung einsetzen.

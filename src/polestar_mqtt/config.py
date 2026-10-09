@@ -31,6 +31,7 @@ DEFAULT_MQTT_KEEPALIVE_SECONDS = 60
 DEFAULT_MQTT_BASE_TOPIC = "polestar2"
 DEFAULT_MQTT_TOPIC_MAPPING_FILE = Path("/local-files/mqtt_topic_mapping.csv")
 DEFAULT_MQTT_TOPIC_STATE_FILE = Path("/local-files/mqtt_topic_state.json")
+DEFAULT_POLESTAR_OPENAPI_FILE = Path("/local-files/Polestar_DataPortalAPI.json")
 DEFAULT_OPENWB_HOST = "localhost"
 DEFAULT_OPENWB_PORT = 1883
 DEFAULT_OPENWB_LP_NUM = 1
@@ -104,6 +105,7 @@ class DataPortalConfig:
     openwb_host: str
     openwb_port: int
     openwb_lp_num: int
+    openapi_file: Path = DEFAULT_POLESTAR_OPENAPI_FILE
 
     def redact(self, text: str) -> str:
         """Redact every secret held by this configuration from text."""
@@ -224,4 +226,7 @@ class DataPortalConfig:
             openwb_host=openwb_host,
             openwb_port=openwb_port,
             openwb_lp_num=openwb_lp_num,
+            openapi_file=Path(
+                values.get("POLESTAR_OPENAPI_FILE", "").strip() or DEFAULT_POLESTAR_OPENAPI_FILE
+            ),
         )

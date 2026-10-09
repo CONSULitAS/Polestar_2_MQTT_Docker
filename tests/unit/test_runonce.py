@@ -165,3 +165,20 @@ def test_inventory_write_failure_fails_run_and_disconnects(run_setup, monkeypatc
     assert main() == 1
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
+
+
+def test_invalid_openapi_stops_before_network(run_setup, tmp_path, monkeypatch, requests_mock):
+    _, _, factory, _ = run_setup
+    local = tmp_path / "invalid.json"
+    local.write_text("invalid", encoding="utf-8")
+    monkeypatch.setenv("POLESTAR_OPENAPI_FILE", str(local))
+    assert main() == 2
+    assert requests_mock.call_count == 0
+    factory.assert_not_called()
+
+
+def test_openapi_loaded_once_per_start(run_setup, monkeypatch):
+    loader = Mock(wraps=runonce.load_openapi_document)
+    monkeypatch.setattr(runonce, "load_openapi_document", loader)
+    assert main() == 0
+    loader.assert_called_once()
