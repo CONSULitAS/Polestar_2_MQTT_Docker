@@ -198,3 +198,29 @@ def test_redacts_secrets_from_repr_and_text(
     assert config.redact(
         "client-secret-value and mqtt-password-value"
     ) == f"{REDACTED_VALUE} and {REDACTED_VALUE}"
+
+
+@pytest.mark.parametrize("url", [
+    "http://example.invalid/api", "//example.invalid/api", "https:///api",
+    "https://user:private@example.invalid/api", "https://example.invalid/api?q=private",
+    "https://example.invalid/api#private", "https://example.invalid:0/api",
+    "https://example.invalid:invalid/api", "https://example.invalid:65536/api",
+    "https://example.invalid\\other/api", "https://example.invalid/a b",
+    "https://example.invalid/\nprivate", "https://[invalid/api",
+])
+def test_rejects_unsafe_api_base_without_exposing_value(valid_environment, url):
+    from polestar_mqtt.polestar_api import DataPortalHttpClient
+
+    with pytest.raises(ConfigurationError, match="POLESTAR_API_BASE_URL") as error:
+        DataPortalConfig.from_environment({**valid_environment, "POLESTAR_API_BASE_URL": url})
+    assert url not in str(error.value)
+    assert "private" not in str(error.value)
+    with pytest.raises(ConfigurationError):
+        DataPortalHttpClient(url)
+
+
+def test_api_base_accepts_explicit_https_host_port_and_path(valid_environment):
+    config = DataPortalConfig.from_environment({
+        **valid_environment, "POLESTAR_API_BASE_URL": "https://example.invalid:8443/custom/",
+    })
+    assert config.api_base_url == "https://example.invalid:8443/custom"

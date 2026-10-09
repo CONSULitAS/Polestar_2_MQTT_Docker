@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 import requests
 
-from polestar_mqtt.config import VIN_PATTERN, redact_sensitive_text
+from polestar_mqtt.config import VIN_PATTERN, redact_sensitive_text, validate_api_base_url
 
 
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
@@ -114,12 +114,11 @@ class DataPortalHttpClient:
             DEFAULT_READ_TIMEOUT_SECONDS,
         ),
     ) -> None:
-        if not base_url.strip():
-            raise ValueError("base_url must not be empty")
+        validated_base_url = validate_api_base_url(base_url)
         if timeout[0] <= 0 or timeout[1] <= 0:
             raise ValueError("HTTP timeouts must be greater than zero")
 
-        self.base_url = base_url.rstrip("/")
+        self.base_url = validated_base_url
         self.timeout = timeout
         self.session = session if session is not None else requests.Session()
         self._owns_session = session is None

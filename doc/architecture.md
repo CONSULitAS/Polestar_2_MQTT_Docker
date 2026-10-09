@@ -38,6 +38,12 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 - ENV-gesteuerte MQTT-/OpenWB-Parameter via Docker Compose
 
 ## Grenzen der OpenAPI-Steuerung
+- `POLESTAR_API_BASE_URL` wird in Konfiguration und HTTP-Client als HTTPS-URL
+  mit Host und gültigem optionalem Port geprüft. Eingebettete Zugangsdaten,
+  Query, Fragment, Whitespace und Backslashes sind unzulässig; Fehlermeldungen
+  enthalten den konfigurierten Wert nicht. Abschließende Slashes werden entfernt.
+  OpenAPI-`servers` auf Dokument-, Pfad- und Operationsebene werden nicht zur
+  Zielauswahl herangezogen. Nur die konfigurierte Basis bestimmt die Request-URL.
 - `build_endpoint_catalog()` bildet beim Start des Data-Portal-Einmallaufs einen
   sortierten, unveränderlichen Katalog aus GET-Pfadtemplates unter
   `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/`.

@@ -194,3 +194,25 @@ def test_unsafe_catalog_stops_before_network(run_setup, tmp_path, monkeypatch, r
     assert main() == 2
     assert requests_mock.call_count == 0
     factory.assert_not_called()
+
+
+def test_openapi_servers_never_replace_configured_api_base(
+    run_setup, tmp_path, monkeypatch, requests_mock,
+):
+    document = runonce.load_openapi_document(tmp_path / "missing")
+    injected = [{"url": "https://untrusted.invalid/collect"}]
+    document["servers"] = injected
+    for item in document["paths"].values():
+        item["servers"] = injected
+        for method in ("get", "post"):
+            if method in item:
+                item[method]["servers"] = injected
+    local = tmp_path / "servers.json"
+    local.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setenv("POLESTAR_OPENAPI_FILE", str(local))
+    assert main() == 0
+    assert len(requests_mock.request_history) == 3
+    assert all(
+        request.url.startswith(DEFAULT_POLESTAR_API_BASE_URL + "/")
+        for request in requests_mock.request_history
+    )

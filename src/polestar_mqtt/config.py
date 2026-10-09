@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime, time
 from os import environ as process_environment
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -42,6 +43,27 @@ REDACTED_VALUE = "[REDACTED]"
 
 class ConfigurationError(ValueError):
     """Raised when application configuration is missing or malformed."""
+
+
+def validate_api_base_url(value: str) -> str:
+    """Require an explicit HTTPS base without credentials or URL suffixes."""
+
+    try:
+        parsed = urlsplit(value)
+        valid = (
+            parsed.scheme == "https" and bool(parsed.hostname)
+            and parsed.username is None and parsed.password is None
+            and "?" not in value and "#" not in value and "\\" not in value
+            and not any(character.isspace() or ord(character) < 32 for character in value)
+            and (parsed.port is None or 1 <= parsed.port <= 65535)
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ConfigurationError(
+            "POLESTAR_API_BASE_URL must be an HTTPS URL without credentials, query or fragment"
+        )
+    return value.rstrip("/")
 
 
 def redact_sensitive_text(text: str, *sensitive_values: str) -> str:
@@ -157,7 +179,7 @@ class DataPortalConfig:
                 f"{POLESTAR_VIN_ENV} must be a valid 17-character VIN"
             )
 
-        api_base_url = (
+        api_base_url = validate_api_base_url(
             values.get(POLESTAR_API_BASE_URL_ENV, "").strip()
             or DEFAULT_POLESTAR_API_BASE_URL
         )

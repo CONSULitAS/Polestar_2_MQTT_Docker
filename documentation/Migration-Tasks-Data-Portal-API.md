@@ -245,7 +245,20 @@ Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
     abgelehnt und nicht ausgeführt. Gemäß der anschließend präzisierten
     Testregel in `AGENTS.md` genügt für diesen Schritt der erfolgreiche lokale
     Nachweis; ein zusätzlicher Container-Test ist hier nicht erforderlich.
-- [ ] Die `servers`-URL einer ausgetauschten Spezifikation niemals ungeprüft als Request-Ziel übernehmen; die validierte `POLESTAR_API_BASE_URL` bleibt maßgeblich.
+- [x] Die `servers`-URL einer ausgetauschten Spezifikation niemals ungeprüft als Request-Ziel übernehmen; die validierte `POLESTAR_API_BASE_URL` bleibt maßgeblich.
+  - 2026-10-09: Vorgesehene Skriptprüfungen nachgeholt: `./run_tests.sh` mit Ruff,
+    322 bestandenen Tests und abgeschlossenem Legacy-Einmallauf (Exit-Code 0).
+    Anschließend `./run_local.sh runonce-DataPortalAPI` erfolgreich: API-Abfrage
+    und MQTT-Veröffentlichung bestätigt, Exit-Code 0. Schritt lokal abgenommen.
+  - 2026-10-09: API-Basisvalidierung in Konfiguration und HTTP-Client ergänzt:
+    HTTPS mit Host und gültigem optionalem Port; keine eingebetteten Zugangsdaten,
+    Query, Fragmente, Whitespace oder Backslashes. Regressionstest bestätigt,
+    dass `servers` auf Dokument-, Pfad- und Operationsebene die Ziele von Token-,
+    Fahrzeuglisten- und Battery-Abrufen nicht überschreiben.
+    Der angeforderte `./run_tests.sh`-Lauf mit Netzwerkzugriff wurde im
+    Berechtigungsdialog abgelehnt. Ersatzweise Ruff und vollständiges pytest mit
+    vorhandener `.venv` ohne Netzwerk ausgeführt: 322 Tests erfolgreich, Exit-Code 0.
+    Die anschließende Abnahme über die vorgesehenen Skripte ist oben dokumentiert.
 - [ ] Je Operation Pfadtemplate, fachlichen Topic-Wurzelpfad, `x-required-scopes`, Beschreibung und optionale `x-supported-models` erfassen; `{vin}` ausschließlich über die vorhandene VIN-Validierung und sichere Pfadkodierung einsetzen.
 - [ ] Alle für die aktivierten Endpunkte benötigten Scopes deduplizieren, deterministisch sortieren und als leerzeichenseparierten Scope-String beim Token-Endpunkt anfordern.
 - [ ] Eine optionale Endpunktauswahl beziehungsweise Ausschlussliste vorsehen, insbesondere damit sensible Daten wie `telemetry/location` bewusst deaktiviert werden können; unbekannte Einträge beim Start ablehnen.
