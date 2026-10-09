@@ -38,6 +38,17 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 - ENV-gesteuerte MQTT-/OpenWB-Parameter via Docker Compose
 
 ## Grenzen der OpenAPI-Steuerung
+- `build_endpoint_catalog()` bildet beim Start des Data-Portal-Einmallaufs einen
+  sortierten, unveränderlichen Katalog aus GET-Pfadtemplates unter
+  `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/`.
+  Nach dem Präfix sind ausschließlich nicht leere Segmente aus ASCII-Buchstaben,
+  Ziffern, Bindestrichen und Unterstrichen erlaubt. Weitere Platzhalter,
+  Prozentkodierung, Punktsegmente, Query, Fragment und Backslashes werden
+  abgelehnt. Pfad-/Operationsreferenzen werden nicht aufgelöst und sind unzulässig.
+  `/token`, `/v1/vehicles` und `x-`-Metadaten bleiben außerhalb des Katalogs;
+  Schreiboperationen werden ausgeschlossen, unbekannte Pfade abgelehnt.
+  Der Katalog steuert noch keine Requests; Metadaten, Scopes und generische
+  Abrufschleife folgen in separaten M5B-Schritten.
 - Die versionierte Spezifikation liegt unter `api/Polestar_DataPortalAPI.json`
   und wird beim Image-Build nach `/app/api/Polestar_DataPortalAPI.json` kopiert.
   `select_openapi_file()` in `openapi_catalog.py` wählt die über

@@ -43,7 +43,8 @@ Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar 
 - Kommentarregeln für `src/`: nur nicht offensichtliche Logik, Protokollbesonderheiten oder Fehlerpfade kommentieren; triviale Zuweisungen nicht kommentieren.
 - Kommentarregeln für `tests/`: bei komplexeren Fällen klare Struktur (z. B. Arrange/Act/Assert oder äquivalente Abschnittsblöcke), damit Testintention und Erwartung schnell erkennbar sind.
 - Wenn Tests nicht ausgeführt werden können oder fehlschlagen, muss der KI-Agent dies transparent benennen und die Arbeit nicht als vollständig verifiziert darstellen.
-- Bei API-/Login-Änderungen immer zuerst lokal testen (`./run_local.sh`) und danach im Container gegenprüfen.
+- API-/Login-Änderungen mit dem passenden lokalen Modus von `./run_local.sh` prüfen; ein erfolgreicher lokaler Lauf genügt für den einzelnen Umsetzungsschritt.
+- Container nur bei Docker-/Image-/Mount-spezifischen Änderungen oder ausdrücklich vorgesehenen Container-Abnahme-Gates bauen und prüfen. Kein routinemäßiger Container-Build nach jeder Codeänderung; ein entfallender Container-Test blockiert die lokale Abnahme nicht.
 - Bei Änderungen an MQTT-Topics auf Rückwärtskompatibilität achten (bestehende Dashboards/Node-RED-Flows).
 
 ## Definition of Done (DoD)

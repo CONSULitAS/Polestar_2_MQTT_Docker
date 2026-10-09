@@ -1,4 +1,4 @@
-"""Local OpenAPI source selection for the future endpoint catalog."""
+"""Local OpenAPI loading and safe endpoint catalog construction."""
 
 import json
 import re
@@ -12,6 +12,12 @@ from polestar_mqtt.config import ConfigurationError, DEFAULT_POLESTAR_OPENAPI_FI
 _SOURCE_ROOT = Path(__file__).resolve().parents[1]
 _BUNDLE_ROOT = _SOURCE_ROOT.parent if _SOURCE_ROOT.name == "src" else _SOURCE_ROOT
 BUNDLED_OPENAPI_FILE = _BUNDLE_ROOT / "api" / "Polestar_DataPortalAPI.json"
+# Authentication and vehicle discovery remain explicit client operations.
+EXPLICIT_API_PATHS = frozenset({"/token", "/v1/vehicles"})
+ENDPOINT_PATH_PATTERN = re.compile(
+    r"/v1/vehicles/\{vin\}/(?:telemetry|charging)/"
+    r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*"
+)
 
 
 def select_openapi_file(
@@ -98,3 +104,28 @@ def load_openapi_document(
     if "components" in document and not isinstance(document["components"], dict):
         raise ConfigurationError("OpenAPI components must be an object")
     return document
+
+
+def build_endpoint_catalog(document: dict) -> tuple[str, ...]:
+    """Return sorted GET templates from an already loaded OpenAPI document."""
+
+    paths = document.get("paths")
+    if not isinstance(paths, dict):
+        raise ConfigurationError("OpenAPI paths must be an object")
+    endpoints = []
+    for path, item in paths.items():
+        if not isinstance(path, str):
+            raise ConfigurationError("OpenAPI path must be a string")
+        if path.startswith("x-") or path in EXPLICIT_API_PATHS:
+            continue
+        if not ENDPOINT_PATH_PATTERN.fullmatch(path):
+            raise ConfigurationError("OpenAPI path is outside the supported vehicle endpoints")
+        if not isinstance(item, dict) or "$ref" in item:
+            raise ConfigurationError("OpenAPI catalog requires inline path objects")
+        if "get" not in item:
+            continue
+        operation = item["get"]
+        if not isinstance(operation, dict) or "$ref" in operation:
+            raise ConfigurationError("OpenAPI catalog requires inline GET operations")
+        endpoints.append(path)
+    return tuple(sorted(endpoints))

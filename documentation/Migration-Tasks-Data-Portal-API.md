@@ -230,7 +230,21 @@ Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
     MQTT bestätigt, Exit-Code 0. Anschließend Loader im neu gebauten Image ohne
     Netzwerk geprüft: Fallback, lokale Datei, stabiler Snapshot und Ablehnung
     ungültigen JSONs erfolgreich, Exit-Code 0. Keine Fahrzeugdaten protokolliert.
-- [ ] Ausschließlich `GET`-Operationen unter `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/` in den Endpoint-Katalog aufnehmen. Token-, Fahrzeuglisten-, Schreib- und unbekannte Pfade bleiben explizite Programmlogik beziehungsweise werden abgelehnt.
+- [x] Ausschließlich `GET`-Operationen unter `/v1/vehicles/{vin}/telemetry/` und `/v1/vehicles/{vin}/charging/` in den Endpoint-Katalog aufnehmen. Token-, Fahrzeuglisten-, Schreib- und unbekannte Pfade bleiben explizite Programmlogik beziehungsweise werden abgelehnt.
+  - 2026-10-09: Implementiert mit `build_endpoint_catalog()` und Startprüfung im
+    Data-Portal-Einmallauf. Der sortierte Katalog enthält ausschließlich sichere
+    GET-Pfadtemplates; Token und Fahrzeugliste bleiben explizite Programmlogik,
+    Schreiboperationen werden ausgeschlossen. Unbekannte Pfade, weitere
+    Platzhalter, Prozentkodierung, Punktsegmente, Query/Fragment, Backslashes
+    und indirekte Pfad-/Operationsreferenzen werden abgelehnt. Metadaten und
+    generische Abrufe bleiben separate Schritte.
+    Ruff und 307 Tests über `./run_tests.sh` erfolgreich (Exit-Code 0);
+    anschließend lokaler Data-Portal-Einmallauf mit erfolgreicher API-Abfrage
+    und bestätigtem MQTT-Publish (Exit-Code 0). Das aktualisierte Image wurde
+    erfolgreich gebaut. Der Container-Katalogtest wurde im Berechtigungsdialog
+    abgelehnt und nicht ausgeführt. Gemäß der anschließend präzisierten
+    Testregel in `AGENTS.md` genügt für diesen Schritt der erfolgreiche lokale
+    Nachweis; ein zusätzlicher Container-Test ist hier nicht erforderlich.
 - [ ] Die `servers`-URL einer ausgetauschten Spezifikation niemals ungeprüft als Request-Ziel übernehmen; die validierte `POLESTAR_API_BASE_URL` bleibt maßgeblich.
 - [ ] Je Operation Pfadtemplate, fachlichen Topic-Wurzelpfad, `x-required-scopes`, Beschreibung und optionale `x-supported-models` erfassen; `{vin}` ausschließlich über die vorhandene VIN-Validierung und sichere Pfadkodierung einsetzen.
 - [ ] Alle für die aktivierten Endpunkte benötigten Scopes deduplizieren, deterministisch sortieren und als leerzeichenseparierten Scope-String beim Token-Endpunkt anfordern.

@@ -116,3 +116,64 @@ def test_loader_redacts_read_errors(tmp_path, monkeypatch):
         load_openapi_document(tmp_path / "missing")
     assert "private-path" not in str(error.value)
     assert error.value.__suppress_context__
+
+
+def test_catalog_accepts_new_get_and_excludes_explicit_and_write_operations():
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog
+
+    charging = "/v1/vehicles/{vin}/charging/new-setting"
+    telemetry = "/v1/vehicles/{vin}/telemetry/new_field/details"
+    document = {"paths": {
+        telemetry: {"get": {}, "post": {}},
+        "/token": {"post": {}},
+        "/v1/vehicles": {"get": {}},
+        charging: {"get": {}},
+        "/v1/vehicles/{vin}/charging/writeOnly": {"put": {}, "delete": {}},
+        "x-extension": "metadata",
+    }}
+    assert build_endpoint_catalog(document) == (charging, telemetry)
+
+
+@pytest.mark.parametrize("path", [
+    "/v1/unknown", "https://example.invalid/telemetry/battery",
+    "//example.invalid/v1/vehicles/{vin}/telemetry/battery",
+    "/v1/vehicles/{vin}/telemetry/../battery",
+    "/v1/vehicles/{vin}/telemetry/%2e%2e/battery",
+    "/v1/vehicles/{vin}/telemetry/%252e%252e/battery",
+    "/v1/vehicles/{vin}/telemetry/battery?target=other",
+    "/v1/vehicles/{vin}/telemetry/battery#fragment",
+    "/v1/vehicles/{vin}/telemetry/battery\\other",
+    "/v1/vehicles/{vin}/telemetry/{other}",
+    "/v1/vehicles/{vin}/telemetry//battery",
+    "/v1/vehicles/{vin}/telemetry/", "/v1/vehicles/{vin}/telemetry/battery/",
+    "/v1/vehicles/{vin}/telemetry/battery\n",
+    "/v1/vehicles/other/telemetry/battery",
+    "/v1/vehicles/{vin}/commands/start",
+])
+def test_catalog_rejects_unknown_or_unsafe_paths_without_echoing_them(path):
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog
+
+    with pytest.raises(ConfigurationError) as error:
+        build_endpoint_catalog({"paths": {path: {"get": {}}}})
+    assert path not in str(error.value)
+
+
+@pytest.mark.parametrize("item", [
+    {"$ref": "https://example.invalid/paths.json"},
+    {"get": {"$ref": "#/other"}}, {"get": None}, [],
+])
+def test_catalog_rejects_indirect_or_invalid_operations(item):
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog
+
+    with pytest.raises(ConfigurationError):
+        build_endpoint_catalog({"paths": {"/v1/vehicles/{vin}/telemetry/battery": item}})
+
+
+def test_bundled_catalog_contains_only_fifteen_vehicle_gets(tmp_path):
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog, load_openapi_document
+
+    catalog = build_endpoint_catalog(load_openapi_document(tmp_path / "missing"))
+    assert len(catalog) == 15
+    assert "/v1/vehicles/{vin}/telemetry/battery" in catalog
+    assert "/token" not in catalog
+    assert "/v1/vehicles" not in catalog

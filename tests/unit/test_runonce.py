@@ -182,3 +182,15 @@ def test_openapi_loaded_once_per_start(run_setup, monkeypatch):
     monkeypatch.setattr(runonce, "load_openapi_document", loader)
     assert main() == 0
     loader.assert_called_once()
+
+
+def test_unsafe_catalog_stops_before_network(run_setup, tmp_path, monkeypatch, requests_mock):
+    _, _, factory, _ = run_setup
+    document = runonce.load_openapi_document(tmp_path / "missing")
+    document["paths"]["/unexpected"] = {"get": {"responses": {"200": {}}}}
+    local = tmp_path / "unsafe.json"
+    local.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setenv("POLESTAR_OPENAPI_FILE", str(local))
+    assert main() == 2
+    assert requests_mock.call_count == 0
+    factory.assert_not_called()
