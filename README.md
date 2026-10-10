@@ -85,6 +85,9 @@ Notes:
 The container mounts `./local-files` to `/local-files`. Optional overrides are
 `Polestar_DataPortalAPI.json` and `mqtt_topic_mapping.csv` (see its sample file).
 The container user (UID 999) needs write access to this directory for the topic inventory.
+Keep both the inventory and its adjacent `.lock` file in this shared directory.
+Container restart and replacement preserve pending operations; a read-only mount stops
+the run before network access. See the [container persistence acceptance record](documentation/Migration-Tasks-Data-Portal-API.md#m62--bestätigte-veröffentlichung-und-dauerhaftes-topic-inventar).
 
 ## Docker startup
 

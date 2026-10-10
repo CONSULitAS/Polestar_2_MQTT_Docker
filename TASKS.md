@@ -19,6 +19,8 @@ Die regulären Startwege verwenden vorerst den Data-Portal-Einmallauf.
 
 ## Chronologischer Verlauf
 
+- [x] 2026-10-10: Container-Persistenzabnahme für M6.2 auf Commit `50d86d7` bestanden: UID-999-Schreibrechte, atomare Speicherung, Neustart, Sperre zwischen Containern, Wiederaufnahme nach SIGKILL und unverändertes Inventar bei schreibgeschütztem Mount. Letzten M6.2-Punkt geschlossen; separater Testbroker-Nachweis in M6.4 bleibt offen.
+
 - [x] 2026-10-10: Retained-Bereinigung im Einmallauf umgesetzt: gebundenes Inventar v3, bestätigte Löschungen, Wiederaufnahme offener Vorgänge und Schutz von Diagnose-/Container-Topics. Ruff und 405 Tests erfolgreich; lokaler API-/MQTT-Lauf mit 270 bestätigten Publishes und einem NoData-Endpunkt. Erledigte M6.2-/QS-Aufgaben geschlossen; Container-Persistenzabnahme und Testbroker-Integration bleiben separat offen.
 
 - [x] 2026-10-10: Aufgabenstatus der endpunktbezogenen MQTT-Diagnose korrigiert: Ausgabe und Schutzmechanismen im Einmallauf abgeschlossen; verbleibenden Schutz bei Retained-Bereinigung (M6.2) und Polling-Integration (M7) als separate offene Aufgaben erfasst.

@@ -71,7 +71,13 @@ Zur manuellen Bereinigung zunächst den alten Publisher stoppen, mit einem
 MQTT-Client die konkreten retained Topics prüfen und ausschließlich eindeutig
 eigene, nicht mehr benötigte Topics einzeln mit leerer retained Payload und QoS 1
 löschen. Keine pauschale Löschung des Topic-Baums; Status- und fremde Topics erhalten.
-Die Container-Persistenzabnahme und der separate Testbroker-Nachweis stehen noch aus.
+Die Container-Persistenzabnahme wurde am 2026-10-10 mit UID 999 auf dem lokalen
+Docker-Desktop-Bind-Mount bestanden: atomare Schreibzugriffe, Neustart, Sperre
+zwischen Containern, Freigabe nach SIGKILL und Wiederaufnahme sind nachgewiesen.
+Ein schreibgeschützter Mount führt vor Netzwerkzugriffen zu `TopicInventoryError`
+und lässt das Inventar unverändert. Auf anderen Hosts muss das Verzeichnis samt
+vorhandener Sperrdatei ebenfalls für UID 999 beschreibbar sein; die Prüfung ändert
+keine Host-Berechtigungen. Der separate Testbroker-Nachweis bleibt offen.
 
 Jeder katalogisierte Endpunkt veröffentlicht außerdem `<Endpunktwurzel>/log/state`
 und `<Endpunktwurzel>/log/timestamp` retained mit bestätigtem QoS 1. `state` enthält

@@ -506,7 +506,7 @@ daher kein erneuter vollständiger Test- oder Live-Lauf.
 
 - [x] Die zuletzt erfolgreich publizierte Menge der verwalteten dynamischen und Mapping-Topics in einer lokalen Zustandsdatei außerhalb des Containers persistieren.
 - [x] Die lokale Zustandsdatei atomar ersetzen und Datei sowie Verzeichnis vor Telemetrie-Publishes synchronisieren.
-- [ ] Dauerhafte Einbindung über `local-files`, Schreibrechte und Erhalt des Inventars nach Container-Neustart im Container-Abnahme-Gate prüfen.
+- [x] Dauerhafte Einbindung über `local-files`, Schreibrechte und Erhalt des Inventars nach Container-Neustart im Container-Abnahme-Gate prüfen.
 - [x] Nach einer fachlich validierten API-Antwort die zuvor persistierten Topics mit der nach den Feldregeln der Entscheidungstabelle aktuell erzeugten Topic-Menge vergleichen; Transportfehler und abgelehnte Antworten dürfen keine Inventarbereinigung auslösen.
 - [x] Nicht mehr erzeugte verwaltete Topics mit einem leeren retained Publish (Zero-Length-Payload) und QoS 1 aus dem Broker löschen.
 - [x] Vor dem ersten Telemetrie-Publish einer geänderten Topic-Menge einen ausstehenden Vorgang mit bisheriger und beabsichtigter Topic-Menge dauerhaft speichern. Die neue Topic-Menge erst als abgeschlossen übernehmen, nachdem alle aktuellen Publishes und erforderlichen Lösch-Publishes erfolgreich bestätigt wurden; Wiederaufnahme nach Absturz idempotent gestalten.
@@ -518,6 +518,40 @@ daher kein erneuter vollständiger Test- oder Live-Lauf.
 - [x] `<base>/container` einschließlich aller Unterpfade als stabile, separat verwaltete Betriebs- und Statusschnittstelle schützen (MQTT-Filter `<base>/container/#`); diesen Bereich weder dynamisch aus API-JSON erzeugen noch in das Telemetrie-Topic-Inventar aufnehmen.
 - [x] Relative und absolute Mapping-Ziele im gesamten geschützten Container-Namespace ablehnen.
 - [x] Den Umgang mit alten retained GraphQL-Topics dokumentieren: Sie gehören nicht automatisch zum neuen Inventar. Eine gezielte manuelle Bereinigung erläutern; keine pauschale Löschung des bisherigen Topic-Baums vorsehen.
+
+**2026-10-10: Container-Persistenzabnahme bestanden.** Getesteter Code: Commit
+`50d86d7`, ohne lokale Codeabweichungen. Image lokal mit
+`docker build -t polestar-data-portal:inventory-check .` gebaut, Exit-Code 0;
+Image-ID `sha256:06334ecbafec1248292d9e487e5abecdde606da2e63d92608c30fa0e3ee31595`.
+Docker Engine 29.8.2 unter Docker Desktop; Standardbenutzer UID 999.
+Lokale Compose-Datei und versionierte Vorlage binden übereinstimmend
+`./local-files:/local-files` ein. Die Prüfcontainer verwendeten genau diesen
+Bind-Mount, ein schreibgeschütztes Root-Dateisystem, `--network none`,
+`--cap-drop ALL` und `no-new-privileges`.
+
+- 2026-10-10: Schreiben, Datei-/Verzeichnis-`fsync` und atomarer Austausch über
+  `ManagedTopicInventory` als UID 999 erfolgreich. Synthetisches Inventar v3
+  separat unter `local-files/.inventory-container-check/`; reguläres Inventar
+  und Credentials unverändert.
+- 2026-10-10: Prozess nach gespeichertem offenem Vorgang bewusst mit Exit-Code 23
+  beendet. Derselbe Container per `docker start -a` neu gestartet: bisherige und
+  möglicherweise zugestellte Topics erhalten, Sperre frei, Wiederaufnahme und
+  Abschluss erfolgreich mit Exit-Code 0.
+- 2026-10-10: Ein zusätzlicher Container hielt die Inventarsperre; ein konkurrierender
+  Container wurde mit `TopicInventoryError` ohne Dateiveränderung abgewiesen.
+  Ausschließlich der Sperr-Testcontainer wurde per SIGKILL beendet (Exit-Code 137).
+  Ein neuer Container konnte danach sperren, den offenen Vorgang wieder aufnehmen
+  und mit leerem `pending`/`intended` abschließen, Exit-Code 0.
+- 2026-10-10: Derselbe Bind-Mount schreibgeschützt: Zugriff erwartungsgemäß mit
+  `TopicInventoryError` abgelehnt; SHA-256 des Testinventars davor/danach identisch.
+
+Gesamtergebnis: sechs Prüfungen bestanden. Testdateien und gestoppte Prüfcontainer
+bleiben zur Nachvollziehbarkeit erhalten; das lokale Prüfverzeichnis ist ignoriert.
+Temporärer Prüfablauf und maschinenlesbares Ergebnis liegen lokal unter
+`/private/tmp/polestar-inventory-acceptance/`. Keine API-/MQTT-Verbindungen;
+dieser Nachweis ersetzt weder den separaten Testbroker-Test noch M8-E2E.
+Nur Dokumentation und Git-Ignore-Regel geändert, daher kein erneuter Unit-Testlauf;
+der Code-Prüfstand bleibt Ruff und 405 erfolgreiche Tests aus dem vorigen Schritt.
 
 **QS-Nachweis Retained-Bereinigung vom 10.10.2026:** Basis `52d721f` mit
 lokalen Änderungen an Publisher, Einmallauf, Inventar, Tests und Dokumentation.
