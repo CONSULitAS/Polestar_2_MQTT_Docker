@@ -94,7 +94,8 @@ def test_matching_message_excludes_only_current_endpoint_until_new_client(
     assert [r.url for r in requests_mock.request_history].count(unavailable) == 1
     assert requests_mock.call_count == 5
     assert caplog.messages == [
-        f"{status} / DATA_NOT_AVAILABLE: No a data is available for this vehicle.",
+        f"[{catalog[0].path_template}] {status} / DATA_NOT_AVAILABLE: "
+        "No a data is available for this vehicle.",
     ]
     replacement, _ = make_client(sleep=lambda _: None)
     replacement.get_catalog(catalog, VIN)
@@ -132,8 +133,9 @@ def test_each_retry_error_is_logged_and_sensitive_values_are_redacted(requests_m
     client, _ = make_client(sleep=lambda _: None)
     client.get_endpoint(endpoint, VIN)
     assert caplog.messages == [
-        "503 / UNAVAILABLE: Retry [REDACTED] [REDACTED] [REDACTED] please",
-        "401 / EXPIRED: New token required",
+        f"[{endpoint.path_template}] 503 / UNAVAILABLE: "
+        "Retry [REDACTED] [REDACTED] [REDACTED] please",
+        f"[{endpoint.path_template}] 401 / EXPIRED: New token required",
     ]
 
 
@@ -145,7 +147,9 @@ def test_non_json_error_body_has_safe_fallback(requests_mock, caplog):
     )
     client, _ = make_client()
     client.get_catalog((endpoint,), VIN)
-    assert caplog.messages == ["404 / HTTP_ERROR: No valid API error message"]
+    assert caplog.messages == [
+        f"[{endpoint.path_template}] 404 / HTTP_ERROR: No valid API error message",
+    ]
 
 
 @pytest.mark.parametrize("payload", [None, [], "not an object", 3])
@@ -487,3 +491,23 @@ def test_honors_http_date_retry_after(
     client.get_battery(VIN)
 
     assert delays == [5.0]
+
+
+@pytest.mark.parametrize(("path", "expected"), [
+    ("/token", "/token"),
+    ("/v1/vehicles", "/v1/vehicles"),
+    (f"/v1/vehicles/{VIN}/charging/is-at-charge-location?secret=private-value",
+     "/v1/vehicles/{vin}/charging/is-at-charge-location"),
+])
+# HTTP-Fehler nennen den Endpunkt ohne Fahrzeugkennung oder Query-Parameter.
+def test_http_error_identifies_endpoint_without_sensitive_path_values(
+    requests_mock, caplog, path, expected,
+):
+    requests_mock.get(BASE_URL + path, status_code=404, json={})
+    with DataPortalHttpClient(BASE_URL) as http:
+        http.request("GET", path)
+    assert caplog.messages == [
+        f"[{expected}] 404 / HTTP_ERROR: No valid API error message",
+    ]
+    assert VIN not in caplog.text
+    assert "private-value" not in caplog.text

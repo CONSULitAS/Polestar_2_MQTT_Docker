@@ -1,7 +1,4 @@
-# requirements.txt für Polestar_2_MQTT.py
+# Runtime dependencies for polestar_mqtt
 
 requests
-pytz
 paho-mqtt
-
-# ***** EOF *****

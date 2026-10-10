@@ -20,7 +20,6 @@ fi
 
 create_venv() {
     echo "Creating virtual environment in ${VENV_DIR}"
-    rm -rf "${VENV_DIR}"
     python3 -m venv "${VENV_DIR}"
 }
 
@@ -29,7 +28,7 @@ if [[ ! -x "${VENV_PYTHON}" ]]; then
 fi
 
 if ! "${VENV_PYTHON}" -m pip --version >/dev/null 2>&1; then
-    echo "Virtual environment is incomplete. Recreating ${VENV_DIR}."
+    echo "Virtual environment is incomplete. Repairing ${VENV_DIR}."
     create_venv
 fi
 

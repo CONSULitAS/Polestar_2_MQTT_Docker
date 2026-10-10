@@ -202,8 +202,11 @@ class DataPortalHttpClient:
         if response.status_code >= 400:
             code, message = _error_details(response)
             sensitive = list(self._sensitive_values)
+            endpoint_path = path.split("?", 1)[0].split("#", 1)[0]
+            endpoint_path = re.sub(r"(/v1/vehicles/)[^/]+", r"\1{vin}", endpoint_path)
             logger.warning(
-                "%s / %s: %s", response.status_code,
+                "[%s] %s / %s: %s", _safe_error_text(endpoint_path, sensitive),
+                response.status_code,
                 _safe_error_text(code, sensitive), _safe_error_text(message, sensitive),
             )
             if code == "DATA_NOT_AVAILABLE" or NO_VEHICLE_DATA_PATTERN.search(message):

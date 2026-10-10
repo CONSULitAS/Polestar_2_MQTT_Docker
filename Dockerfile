@@ -28,6 +28,6 @@ EOF
 USER 999
 
 # Befehl, der beim Start des Containers ausgeführt wird
-CMD ["python", "-u", "/app/Polestar_2_MQTT.py"]
+CMD ["python", "-u", "-m", "polestar_mqtt.runonce"]
 
 # ***** EOF *****

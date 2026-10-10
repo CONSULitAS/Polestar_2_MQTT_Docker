@@ -1,7 +1,4 @@
-"""Application orchestration boundary.
+"""Reserved for persistent polling and graceful shutdown (migration task M7).
 
-Startup, dependency wiring, polling, error recovery, and graceful shutdown
-belong in this module. The executable switch from the legacy script takes place
-after the dependent configuration, API, and publisher tasks are implemented.
+The current executable entry point is polestar_mqtt.runonce.
 """
-

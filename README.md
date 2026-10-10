@@ -37,10 +37,6 @@ POLESTAR_CLIENT_SECRET="your-client-secret"
 POLESTAR_CLIENT_SECRET_EXPIRES_AT="2099-12-31"
 POLESTAR_VIN="LPSVS000000000000"
 
-# Temporary legacy login used until the Data Portal runtime is activated
-POLESTAR_EMAIL="you@example.com"
-POLESTAR_PASSWORD="your-polestar-password"
-
 MQTT_USER=""
 MQTT_PASSWORD=""
 ```
@@ -48,9 +44,6 @@ MQTT_PASSWORD=""
 Notes:
 * keep `MQTT_USER` and `MQTT_PASSWORD` empty if your broker has no login
 * use the portal's `YYYY-MM-DD` format for `POLESTAR_CLIENT_SECRET_EXPIRES_AT`
-* `.env.example` temporarily also contains the legacy email/password fields required by
-  `run_local.sh`; they will be removed when the Data Portal runtime becomes the main entry point
-
 #### Register and obtain Data Portal credentials
 
 1. Open the [Polestar Data Portal](https://data-portal.polestar.com/) and sign in or complete the
@@ -82,31 +75,16 @@ POLESTAR_CYCLE="270"
 MQTT_BROKER="mqtt.example.local"
 MQTT_PORT="1883"
 MQTT_BASE_TOPIC="polestar2"
-OPENWB_HOST="openwb.example.local"
-OPENWB_PUBLISH="True"
-OPENWB_PORT="1883"
-OPENWB_LP_NUM="1"
 ```
 
 Notes:
 * this file is only needed for local non-container execution
-* adjust `OPENWB_*` values only if you want direct forwarding to OpenWB v1
 
-## GraphQL overrides
+## Local overrides
 
-The container now mounts `./local-files` to `/local-files`.
-
-If `/local-files/graphql_queries.py` exists inside the container, the app prefers that file over the built-in [src/graphql_queries.py](/home/hi345gr/Docker/Polestar_2_MQTT_Docker/src/graphql_queries.py). This lets you customize GraphQL queries without modifying the shipped source code.
-
-Included template:
-* [local-files/graphql_queries.py_sample](/home/hi345gr/Docker/Polestar_2_MQTT_Docker/local-files/graphql_queries.py_sample)
-
-Usage:
-1. copy `local-files/graphql_queries.py_sample` to `local-files/graphql_queries.py`
-2. adjust the queries or payload builders as needed
-3. restart the container
-
-Keep the function names `build_getconsumercarsv2_payload()` and `build_cartelematicsv2_payload(vin)` unchanged, because the main program imports exactly these names.
+The container mounts `./local-files` to `/local-files`. Optional overrides are
+`Polestar_DataPortalAPI.json` and `mqtt_topic_mapping.csv` (see its sample file).
+The container user (UID 999) needs write access to this directory for the topic inventory.
 
 ## Docker startup
 
@@ -114,11 +92,13 @@ Keep the function names `build_getconsumercarsv2_payload()` and `build_cartelema
 2. download `docker-compose_example.yml`
 3. rename it to `docker-compose.yml` (remove `_example`)
 4. create `.env` from `.env.example`
-5. optionally create `local-files/graphql_queries.py` from `local-files/graphql_queries.py_sample`
+5. optionally create `local-files/mqtt_topic_mapping.csv` from its sample
 6. edit the remaining values under `environment:` in `docker-compose.yml`
-7. start the container with `docker compose up` or `docker compose up -d`
+7. build and run this branch with `docker compose up --build`
 
 The compose setup mounts `./local-files` into the container automatically.
+The current container completes one Data Portal cycle and exits; automatic restart is disabled.
+Persistent polling, container status/LWT, and separate openWB forwarding remain pending.
 
 ## Local startup
 
@@ -129,7 +109,7 @@ The compose setup mounts `./local-files` into the container automatically.
 
 `run_local.sh` creates `.venv` if needed, installs Python dependencies, and then starts the app locally.
 
-For a single polling cycle without the endless loop, use:
+The default start and the explicit command below both execute a single cycle:
 
 ```bash
 ./run_local.sh runonce
@@ -143,7 +123,7 @@ For an authentication-only development check against the official Data Portal AP
 ./run_local.sh auth-check
 ```
 
-This mode only requests an OAuth token. It does not start the legacy application and does not
+This mode only requests an OAuth token. It does not
 connect to vehicle, telemetry, MQTT, or openWB endpoints. `./run_auth_check.sh` remains available
 as a convenience wrapper for the same mode.
 
@@ -153,9 +133,9 @@ For one Data Portal read followed by confirmed MQTT output, use:
 ./run_local.sh runonce-DataPortalAPI
 ```
 
-This mode authenticates, checks vehicle authorization, validates Battery SoC and publishes the
-complete current Battery response retained with QoS 1 under
-`<MQTT_BASE_TOPIC>/telemetry/battery`. It exits successfully only after the broker acknowledges
+This mode authenticates, checks vehicle authorization, validates Battery SoC and publishes successful
+responses from the OpenAPI endpoint catalog retained with QoS 1 under their
+dynamic topic roots, including `<MQTT_BASE_TOPIC>/telemetry/battery`. It exits successfully only after the broker acknowledges
 every publication. The console reports only success and the topic count; credentials, tokens,
 VIN and measurement values are not printed. The MQTT payload includes the API's vehicle data.
 
@@ -170,9 +150,9 @@ See [the mapping documentation](doc/README.md#data-portal-mapping-json-pfad-zu-z
 
 `./run_soc_check.sh`, `./run_local.sh soc-check`, and `python -m polestar_mqtt.soc_check`
 are compatibility entry points for this same command and **now also publish to MQTT**.
-The legacy `./run_local.sh runonce` remains separate. This intermediate command does not run
+`./run_local.sh` and `./run_local.sh runonce` use the same Data Portal command. It does not run
 a polling loop, publish container status, delete old retained topics, or forward separately to
-the openWB broker. It has been tested locally; container validation is deferred.
+the openWB broker.
 
 ## Unit tests
 
@@ -193,15 +173,18 @@ python3 -m venv .venv
 ```
 
 Current focus of the test suite:
-* auth and token handling in `src/auth.py`
-* GraphQL payload builders in `src/graphql_queries.py`
-* MQTT publishing helpers and API response parsing in `src/Polestar_2_MQTT.py`
-* Data Portal configuration, credential expiry, and HTTP transport in `src/polestar_mqtt/`
+* Data Portal configuration, credential expiry, OAuth and HTTP transport
+* OpenAPI endpoint catalog, response validation and diagnostics
+* Dynamic MQTT topics, optional mappings and topic inventory
 
 Discussions (in german ) here:
 https://polestar.fans/t/polestar-api-zu-mqtt-im-container/18589
 
-## direct forwarding to OpenWB v1:
-* set `OPENWB_HOST:    "ip/dns name of openWB"`
-* set `OPENWB_PUBLISH: True`
-* optionally set `OPENWB_PORT` and `OPENWB_LP_NUM` - if not set it defaults to port 1883 and 1 (which results in topic `openWB/set/lp/1/%Soc`)
+## Migration from the old API
+
+Polestar ID/password login, GraphQL queries, the old Node-RED example and their
+tests have been removed. Existing local credentials and override files are not modified;
+email/password and GraphQL overrides are no longer used. Configure Data Portal credentials
+instead. MQTT consumers must use the dynamic topics or explicit CSV mappings.
+Separate forwarding to an openWB broker is not implemented in the current runtime.
+The `soc-check` aliases remain available for existing development commands.

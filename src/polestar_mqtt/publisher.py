@@ -1,8 +1,4 @@
-"""MQTT and openWB publishing boundary.
-
-Topic construction, MQTT lifecycle handling, and optional openWB forwarding
-belong in this module. They are migrated from the legacy script in task M6.
-"""
+"""Dynamic MQTT topic construction, CSV mapping, and publication helpers."""
 
 from __future__ import annotations
 

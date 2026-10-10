@@ -6,7 +6,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"
 REQUIREMENTS_FILE="${SCRIPT_DIR}/src/requirements.txt"
-APP_FILE="${SCRIPT_DIR}/src/Polestar_2_MQTT.py"
 AUTH_CHECK_MODULE="polestar_mqtt.auth_check"
 DATA_PORTAL_RUNONCE_MODULE="polestar_mqtt.runonce"
 ENV_FILE="${SCRIPT_DIR}/.env"
@@ -21,11 +20,6 @@ fi
 
 if [[ ! -f "${REQUIREMENTS_FILE}" ]]; then
     echo "Requirements file not found: ${REQUIREMENTS_FILE}" >&2
-    exit 1
-fi
-
-if [[ ! -f "${APP_FILE}" ]]; then
-    echo "Application file not found: ${APP_FILE}" >&2
     exit 1
 fi
 
@@ -68,8 +62,6 @@ fi
 
 create_venv() {
     echo "Creating virtual environment in ${VENV_DIR}"
-    # Recreate from scratch so a half-created venv cannot survive unnoticed.
-    rm -rf "${VENV_DIR}"
     python3 -m venv "${VENV_DIR}"
 }
 
@@ -78,9 +70,9 @@ if [[ ! -x "${VENV_PYTHON}" ]]; then
 fi
 
 # Some systems leave behind an incomplete venv without pip support.
-# In that case, rebuild it once before giving up.
+# In that case, repair it once before giving up.
 if ! "${VENV_PYTHON}" -m pip --version >/dev/null 2>&1; then
-    echo "Virtual environment is incomplete. Recreating ${VENV_DIR}."
+    echo "Virtual environment is incomplete. Repairing ${VENV_DIR}."
     create_venv
 fi
 
@@ -108,41 +100,8 @@ if [[ "${RUN_MODE}" == "auth-check" ]]; then
     exec "${VENV_PYTHON}" -m "${AUTH_CHECK_MODULE}"
 fi
 
-if [[ "${RUN_MODE}" == "soc-check" || "${RUN_MODE}" == "runonce-DataPortalAPI" ]]; then
-    export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
-    export MQTT_TOPIC_MAPPING_FILE="${MQTT_TOPIC_MAPPING_FILE:-${SCRIPT_DIR}/local-files/mqtt_topic_mapping.csv}"
-    export MQTT_TOPIC_STATE_FILE="${MQTT_TOPIC_STATE_FILE:-${SCRIPT_DIR}/local-files/mqtt_topic_state.json}"
-    echo "Starting one-time Data Portal read and MQTT publication"
-    exec "${VENV_PYTHON}" -m "${DATA_PORTAL_RUNONCE_MODULE}"
-fi
-
-# These variables must be set and non-empty for a local run.
-missing_env=()
-for var_name in     POLESTAR_EMAIL     POLESTAR_PASSWORD     POLESTAR_VIN     TZ     POLESTAR_CYCLE     MQTT_BROKER     MQTT_PORT     MQTT_BASE_TOPIC     OPENWB_HOST     OPENWB_PUBLISH     OPENWB_PORT     OPENWB_LP_NUM; do
-    if [[ -z "${!var_name:-}" ]]; then
-        missing_env+=("${var_name}")
-    fi
-done
-
-# Empty MQTT credentials are valid, but the variables should still exist.
-missing_optional_env=()
-for var_name in MQTT_USER MQTT_PASSWORD; do
-    if [[ -z "${!var_name+x}" ]]; then
-        missing_optional_env+=("${var_name}")
-    fi
-done
-
-if (( ${#missing_env[@]} > 0 )); then
-    echo "Missing required environment variables: ${missing_env[*]}" >&2
-    echo "Check ${ENV_FILE} and ${ENV_LOCAL_FILE}." >&2
-    exit 1
-fi
-
-if (( ${#missing_optional_env[@]} > 0 )); then
-    echo "Missing optional environment variables: ${missing_optional_env[*]}" >&2
-    echo "Define them in ${ENV_FILE}, even if they are intentionally empty." >&2
-    exit 1
-fi
-
-echo "Starting ${APP_FILE}"
-exec "${VENV_PYTHON}" -u "${APP_FILE}" "${APP_ARGS[@]}"
+export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+export MQTT_TOPIC_MAPPING_FILE="${MQTT_TOPIC_MAPPING_FILE:-${SCRIPT_DIR}/local-files/mqtt_topic_mapping.csv}"
+export MQTT_TOPIC_STATE_FILE="${MQTT_TOPIC_STATE_FILE:-${SCRIPT_DIR}/local-files/mqtt_topic_state.json}"
+echo "Starting one-time Data Portal read and MQTT publication (polling is not implemented yet)"
+exec "${VENV_PYTHON}" -m "${DATA_PORTAL_RUNONCE_MODULE}"

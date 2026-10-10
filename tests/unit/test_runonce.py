@@ -447,7 +447,7 @@ def test_nodata_log_matches_console_and_recovers(run_setup, requests_mock, caplo
     }})
     assert main() == 0
     state = "404 / DATA_NOT_AVAILABLE: No exterior data is available for this vehicle."
-    assert state in caplog.messages
+    assert f"[/v1/vehicles/{{vin}}/telemetry/exterior] {state}" in caplog.messages
     topic = "polestar2-test/telemetry/exterior/log/state"
     client.publish.assert_any_call(topic, state, qos=1, retain=True)
     requests_mock.get(url, json={"data": {"value": 1}})

@@ -1,19 +1,19 @@
 # AGENTS.md
 
 ## Ziel des Projekts
-Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar API und MQTT. Das Hauptskript liest Fahrzeugdaten (GraphQL via Polestar API) und veröffentlicht diese periodisch an einen MQTT-Broker. Optional wird der SoC zusätzlich an OpenWB v1 weitergereicht.
+Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar API und MQTT. Die Data-Portal-Laufzeit liest Fahrzeugdaten über die offizielle REST-API und veröffentlicht diese an einen MQTT-Broker. Aktuell ist ein Einmallauf implementiert; dauerhaftes Polling, LWT und separate OpenWB-Weiterleitung bleiben offene Migrationsaufgaben.
 
 ## Primäre Komponenten
-- `src/Polestar_2_MQTT.py`: Hauptanwendung (Login, Token-Handling, API-Zugriffe, MQTT-Publishing)
-- `src/graphql_queries.py`: Standard-GraphQL-Payloads
-- `local-files/graphql_queries.py_sample`: Vorlage für lokale Query-Overrides
+- `src/polestar_mqtt/`: Data-Portal-Konfiguration, OAuth, API-Zugriffe und MQTT-Publishing
+- `src/polestar_mqtt/runonce.py`: ausführbarer Einmallauf
+- `api/Polestar_DataPortalAPI.json`: gebündelte OpenAPI-Spezifikation
 - `docker-compose.yml` / `docker-compose_example.yml`: Container-Betrieb
 - `.env` und `.env_local`: Laufzeitkonfiguration
 
 ## Laufzeit- und Konfigurationsprinzipien
 - Secrets und Zugangsdaten liegen in `.env` (nicht einchecken).
 - Für lokalen Start wird zusätzlich `.env_local` verwendet.
-- GraphQL-Queries sollen bevorzugt über `local-files/graphql_queries.py` angepasst werden (statt Core-Code zu patchen).
+- Lokale OpenAPI- und MQTT-Mapping-Anpassungen liegen unter `local-files/`.
 - Der Container mountet `./local-files` nach `/local-files`.
 
 ## Task-Tracking
@@ -23,7 +23,7 @@ Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar 
 ## Umgang mit Git
 - Vor Änderungen `git status --short` prüfen; vorhandene Änderungen und deren Staging-Zustand erhalten.
 - Versionierte Dateien ausschließlich mit `git mv` verschieben oder umbenennen, niemals per `mv` oder Kopieren/Löschen. Das dabei entstehende Staging ist beabsichtigt.
-- Beauftragte Löschungen versionierter Dateien mit `git rm` ausführen; keine fremden Änderungen verwerfen.
+- Dateien ausschließlich mit `git rm` löschen; keine direkten `rm`-Befehle und keine Umgehung durch andere Löschwerkzeuge verwenden. Nicht versionierte Dateien erhalten; keine fremden Änderungen verwerfen.
 - Nur aufgabenbezogene Dateien gezielt stagen; kein pauschales `git add .` oder `git add -A`.
 - Commits, Pushes und Änderungen der Git-Historie nur im ausdrücklich beauftragten Umfang durchführen. Destruktive Befehle wie `reset --hard`, `clean` oder Force-Push benötigen ausdrückliche Freigabe.
 - Blockierte Git-Schreibzugriffe über die vorgesehene Berechtigungsfreigabe lösen; nicht durch Dateisystemoperationen umgehen.

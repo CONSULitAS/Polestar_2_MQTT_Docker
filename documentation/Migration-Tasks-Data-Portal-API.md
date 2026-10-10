@@ -698,12 +698,32 @@ begrenzt dokumentiert.
 ## M9 – Alten API-Code entfernen und Migration abschließen
 
 **Priorität:** Hoch  
-**Abhängigkeiten:** erfolgreicher M8A-Security- und Release-Gate
+**Abhängigkeiten:** erfolgreicher M8A-Security- und Release-Gate für den Release-Abschluss.
 
-- [ ] Polestar-ID-, PKCE- und Benutzer-Login-Code entfernen.
-- [ ] Refresh-Token-Code entfernen.
-- [ ] GraphQL-Requests an `mystar-v2` entfernen.
-- [ ] Nicht mehr benötigte Imports und Abhängigkeiten entfernen.
+2026-10-10: Auf ausdrücklichen Nutzerauftrag wurde die Legacy-Entfernung vorgezogen.
+Lokaler Standardstart, `runonce` und Docker verwenden vorerst den vorhandenen
+Data-Portal-Einmallauf; die Compose-Vorlage deaktiviert automatische Neustarts.
+M7 sowie die vollständigen M8/M8A-Release-Gates bleiben offen. Die SoC-Aliase
+bleiben für bestehende Entwicklungsbefehle unterstützt. Historische QS-Nachweise
+beschreiben weiterhin den damaligen Stand.
+
+QS 2026-10-10 (Arbeitsbaum mit lokalen, noch nicht committeten Änderungen):
+`./run_tests.sh` ohne Logumleitung ausgeführt: Ruff erfolgreich, 375 Tests bestanden,
+anschließender Data-Portal-Einmallauf mit Exit-Code 0 und 273 bestätigten MQTT-Topics.
+Ein Endpunkt meldete `DATA_NOT_AVAILABLE`; der Einmallauf meldete entsprechend
+`partial`. Dauerbetrieb, LWT und separate OpenWB-Ausgabe wurden nicht geprüft.
+Docker-Build erfolgreich: lokales Image `polestar-data-portal:legacy-removal`,
+Image-ID `sha256:6ab3434668b2825fc3b0587018998a25ac663ef3a8ab0b3e746d301b34ad8d3b`.
+Netzwerkfreier Container-Smoke-Test bestätigt Imports, OpenAPI-Katalog und die
+Abwesenheit der entfernten Module sowie lokaler Python-Caches. Ein Container-E2E-Lauf
+mit echten Credentials ist damit nicht nachgewiesen.
+
+
+
+- [x] Polestar-ID-, PKCE- und Benutzer-Login-Code entfernen.
+- [x] Refresh-Token-Code entfernen.
+- [x] GraphQL-Requests an `mystar-v2` entfernen.
+- [x] Nicht mehr benötigte Imports und Abhängigkeiten entfernen.
 - [ ] Verbliebene Übergangsnamen und Einstiegspunkte bereinigen: `soc-check`, `run_soc_check.sh` und `polestar_mqtt.soc_check` bei der finalen Umschaltung entfernen oder ihre weitere Unterstützung ausdrücklich begründen; Referenzen und Laufzeitbeschreibungen in README, `doc/`, `AGENTS.md` und `TASKS.md` aktualisieren. Historische QS-Nachweise unverändert lassen. Die aktuellen Einmallauf-Tests heißen bereits `tests/unit/test_runonce.py` und testen direkt `polestar_mqtt.runonce`.
 - [ ] Veraltete Umgebungsvariablen aus allen Dokumenten entfernen.
 - [ ] Optional beim Start eine eindeutige Fehlermeldung für noch gesetzte Altvariablen ausgeben.
