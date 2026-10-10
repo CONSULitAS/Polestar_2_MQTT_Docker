@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Ziel des Projekts
-Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar API und MQTT. Die Data-Portal-Laufzeit liest Fahrzeugdaten über die offizielle REST-API und veröffentlicht diese an einen MQTT-Broker. Aktuell ist ein Einmallauf implementiert; dauerhaftes Polling, LWT und separate OpenWB-Weiterleitung bleiben offene Migrationsaufgaben.
+Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar API und MQTT. Die Data-Portal-Laufzeit liest Fahrzeugdaten über die offizielle REST-API und veröffentlicht diese an einen MQTT-Broker. Aktuell ist ein Einmallauf mit MQTT-Betriebsstatus und Offline-LWT implementiert; dauerhaftes Polling, automatischer Reconnect und separate OpenWB-Weiterleitung bleiben offene Migrationsaufgaben.
 
 ## Primäre Komponenten
 - `src/polestar_mqtt/`: Data-Portal-Konfiguration, OAuth, API-Zugriffe und MQTT-Publishing

@@ -133,4 +133,5 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 - Der alte Polestar-ID-/GraphQL-Code und seine Tests wurden entfernt.
 - Lokaler Start, Testskript und Docker verwenden den Data-Portal-Einmallauf.
 - Die Tests unter `tests/unit/` verwenden die Root-Konfiguration `pytest.ini`.
-- Dauerhaftes Polling, MQTT-Reconnect/LWT und OpenWB-Weiterleitung bleiben offen.
+- Der Einmallauf publiziert Betriebsstatus, Credential-Zustand und ein Offline-LWT.
+- Dauerhaftes Polling, automatischer MQTT-Reconnect und OpenWB-Weiterleitung bleiben offen.

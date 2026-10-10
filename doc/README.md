@@ -77,7 +77,11 @@ zwischen Containern, Freigabe nach SIGKILL und Wiederaufnahme sind nachgewiesen.
 Ein schreibgeschützter Mount führt vor Netzwerkzugriffen zu `TopicInventoryError`
 und lässt das Inventar unverändert. Auf anderen Hosts muss das Verzeichnis samt
 vorhandener Sperrdatei ebenfalls für UID 999 beschreibbar sein; die Prüfung ändert
-keine Host-Berechtigungen. Der separate Testbroker-Nachweis bleibt offen.
+keine Host-Berechtigungen. Der separate Testbroker-Nachweis für den Einmallauf wurde
+am 2026-10-10 mit Mosquitto 2.1.2 bestanden: retained Werte, bestätigte Löschungen,
+Subscriber-Reconnect und Wiederveröffentlichung nach Broker-Neustart. Der
+[Integrationstest](../tests/integration/README.md) ist separat aktivierbar;
+automatischer Publisher-Reconnect im Dauerbetrieb bleibt offen.
 
 Jeder katalogisierte Endpunkt veröffentlicht außerdem `<Endpunktwurzel>/log/state`
 und `<Endpunktwurzel>/log/timestamp` retained mit bestätigtem QoS 1. `state` enthält

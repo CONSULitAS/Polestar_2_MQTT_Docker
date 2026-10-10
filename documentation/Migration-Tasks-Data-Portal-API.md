@@ -605,20 +605,40 @@ bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht a
     Einmallauf und ihre vorhandenen Schutzmechanismen sind abgeschlossen.
     Die verbleibende Integration wird separat unter M6.2 und M7 geführt;
     der vorstehende QS-Nachweis bleibt als historischer Stand erhalten.
-- [ ] Bestehendes LWT unter `<base>/container/connected` beibehalten.
-- [ ] `<base>/container/last_update` als Zeitpunkt des letzten fachlich erfolgreichen Battery-Abrufs definieren und nur dann aktualisieren. Abrufzeit, Quellzeit und MQTT-Zustellstatus unterscheiden; ein alter Quellzeitstempel darf nicht als neue Messung dargestellt werden.
-- [ ] Redigierten Fehlerstatus unter `<base>/container/last_error` bereitstellen.
-- [ ] Bestehendes `<base>/container/last_exception` beibehalten und ausschließlich redigierte technische Fehlerinformationen publizieren.
+- [x] Bestehendes LWT unter `<base>/container/connected` beibehalten.
+- [x] `<base>/container/last_update` als Zeitpunkt des letzten fachlich erfolgreichen Battery-Abrufs definieren und nur dann aktualisieren. Abrufzeit, Quellzeit und MQTT-Zustellstatus unterscheiden; ein alter Quellzeitstempel darf nicht als neue Messung dargestellt werden.
+- [x] Redigierten Fehlerstatus unter `<base>/container/last_error` bereitstellen.
+- [x] Bestehendes `<base>/container/last_exception` beibehalten und ausschließlich redigierte technische Fehlerinformationen publizieren.
 - [ ] Den Quellzeitstempel über die dynamischen Topics zugänglich machen; eine gegebenenfalls zusätzlich aufbereitete Darstellung samt Format und Mapping-Quellpfad ausdrücklich definieren, ohne einen festen Legacy-Telemetrie-Topic vorauszusetzen.
-- [ ] Credential-Überwachung retained publizieren:
-  - [ ] `<base>/container/credentials/client_secret_expires_at`
-  - [ ] `<base>/container/credentials/client_secret_days_remaining`
-  - [ ] `<base>/container/credentials/client_secret_status`
+- [x] Credential-Status im Einmallauf retained publizieren:
+  - [x] `<base>/container/credentials/client_secret_expires_at`
+  - [x] `<base>/container/credentials/client_secret_days_remaining`
+  - [x] `<base>/container/credentials/client_secret_status`
 - [ ] Change Detection für SoC beibehalten.
 - [ ] Nach MQTT-Reconnect aktuelle Telemetrie- und Betriebswerte erneut publizieren, auch bei unverändertem SoC; insbesondere einen Broker-Neustart ohne retained Bestand berücksichtigen.
-- [ ] Credential-Warnungen ab 14 verbleibenden Tagen auch im Fehlerstatus berücksichtigen. Priorität und Rücksetzen von API-, MQTT-, openWB- und Credential-Fehlern festlegen; ein erfolgreicher Battery-Abruf darf eine weiterhin aktive Credential-Warnung nicht löschen.
+- [x] Credential-Warnungen ab 14 verbleibenden Tagen auch im Fehlerstatus des Einmallaufs berücksichtigen. Priorität für Publikations-, API- und Credential-Fehler festlegen; ein erfolgreicher Battery-Abruf löscht aktive Credential-Warnungen nicht.
+- [ ] Fehlerpriorisierung um die separate openWB-Ausgabe erweitern und Rücksetzen aktiver Fehler über mehrere Polling-Zyklen prüfen.
 - [ ] openWB nur mit vorhandenem, validiertem SoC aktualisieren.
 - [ ] Die optionale openWB-Verbindung und ihre Fehlerbehandlung von der Hauptausgabe trennen; ein openWB-Ausfall darf die Telemetrie-Veröffentlichung am Hauptbroker nicht blockieren. Mapping-Ziele bezeichnen Topics, keine zusätzlichen Brokerverbindungen.
+
+**2026-10-10: Betriebsstatus und LWT im Einmallauf abgenommen.** Basis `c48d5f8`
+mit lokalen Änderungen an `runonce.py`, neuem `operational_status.py`, Unit-/
+Integrationstests und Dokumentation; bereits vorhandene lokale Broker-Testergänzungen
+sind enthalten. MQTT-Will vor CONNECT mit `offline`, QoS 1 und Retain gesetzt;
+normaler Abschluss bestätigt `offline`. Bei fehlender Offline-Bestätigung wird
+kein MQTT-DISCONNECT gesendet, damit das Broker-LWT erhalten bleibt.
+Abrufzeit und Credential-Zustand sowie lokale Fehlercodes/Exception-Typen werden
+getrennt vom Telemetrie-Inventar publiziert. MQTT-Phase weiterhin nach API-Abruf;
+Startreihenfolge, tägliche Überwachung, automatischer Reconnect und SIGTERM im
+Dauerbetrieb bleiben M7. Details: [Betriebsvertrag](../doc/operations.md#mqtt-betriebsstatus-des-einmallaufs).
+
+`./run_tests.sh`: Ruff erfolgreich, 414 Unit-Tests bestanden, vier opt-in
+Integrationstests übersprungen, Exit-Code 0. Enthaltener lokaler API-/MQTT-Lauf:
+278 bestätigte Publishes, ein bekannter NoData-Endpunkt, Ergebnis `partial`.
+Separater Mosquitto-2.1.2-Lauf: vier Integrationstests bestanden, darunter echtes
+retained Offline-LWT nach Abbruch eines eigenen Testprozesses. Kein Container-Build,
+da keine Docker-/Mount-Änderung vorliegt. Quellzeit-Rückschritte und die detaillierten
+Datenfehlercodes der Entscheidungstabelle bleiben gesonderte Aufgaben.
 
 ### M6.4 – QS und Abnahme
 
@@ -626,7 +646,31 @@ bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht a
 - [x] Regressionstests für Zielkollisionen, geschützte Unterpfade, Teilantworten, `null`, Zustellfehler und beschädigte oder nicht zuordenbare Inventare ergänzen.
 - [ ] Regressionstests für Quellzeit-Rückschritte über mehrere Zyklen mit M7 ergänzen.
 - [x] Abbrüche vor Telemetrie-Publishes, bei Publish-/Löschbestätigungen und vor Inventarabschluss durch Fehler-Injektion testen; nach Neustart dürfen auch bereits zugestellte neue Topics nicht aus der Bereinigung verloren gehen.
-- [ ] Einen getrennten Integrationstest mit lokalem Testbroker für retained Werte, bestätigte Löschungen, Reconnect und Wiederveröffentlichung durchführen; Unit-Tests weiterhin ohne Netzwerkzugriff ausführen.
+- [x] Einen getrennten Integrationstest mit lokalem Testbroker für retained Werte, bestätigte Löschungen, expliziten Subscriber-Reconnect und Wiederveröffentlichung durch einen neuen Einmallauf durchführen; Unit-Tests weiterhin ohne Netzwerkzugriff ausführen. Automatischer Publisher-Reconnect im Dauerbetrieb bleibt unter M6.3/M7 offen.
+
+**2026-10-10: Testbroker-Abnahme des Einmallaufs bestanden.** Basis `c48d5f8`
+mit lokalen Ergänzungen unter `tests/integration/` und Dokumentationsänderungen;
+Anwendungscode unverändert. Mosquitto 2.1.2 wurde je Test als eigener Prozess
+auf `127.0.0.1` mit dynamischem Port und deaktivierter Persistenz gestartet und
+anschließend beendet. API-Antworten und Credentials ausschließlich synthetisch;
+eigene temporäre Zustandsdateien, keine vorhandenen Broker verwendet.
+
+`POLESTAR_MQTT_INTEGRATION=1 .venv/bin/python -m pytest tests/integration/test_mqtt_broker.py -v`:
+drei Tests erfolgreich, Exit-Code 0. Ein frischer Subscriber bestätigt retained
+Payloads und QoS 1 sowie das Verschwinden gelöschter dynamischer und absoluter
+Mapping-Ziele. Explizites `null` und leere Strings bleiben Nutzwerte; geschützte
+und fremde Topics bleiben erhalten. Nach Subscriber-Reconnect ist der Bestand
+lesbar. Nach Broker-Neustart ist der retained Bestand zunächst leer; ein neuer
+Einmallauf veröffentlicht unveränderte Werte und Diagnosen erneut, ohne das
+unveränderte Inventar neu zu schreiben. NoData erhält den vorherigen Messwert;
+Erholung auf eine gültige leere Antwort löscht ihn und setzt die Diagnose auf `OK`.
+
+`./run_tests.sh`: Ruff erfolgreich, 405 Unit-Tests bestanden, drei Integrationstests
+standardmäßig übersprungen. Enthaltener lokaler API-/MQTT-Einmallauf erfolgreich:
+270 bestätigte Publishes, ein bekannter `404 DATA_NOT_AVAILABLE`-Endpunkt,
+Ergebnis `partial`, Exit-Code 0. Kein erneuter Container-Build erforderlich.
+Automatischer Publisher-Reconnect, LWT und Status-Wiederveröffentlichung im
+Dauerbetrieb sind durch diese Prüfung nicht abgenommen.
 
 **Abnahme:** Die MQTT-Ausgabe bildet die gelieferte JSON-Struktur ohne fest codierte
 Telemetriefeldliste dynamisch ab. Ohne Mapping-Datei entstehen keine zusätzlichen
@@ -681,6 +725,7 @@ Es wurde kein Container gebaut oder gestartet.
 **Abhängigkeiten:** M5, M6
 
 - [ ] Startreihenfolge festlegen: Konfiguration, MQTT, Credential-Status, Token, VIN-Prüfung, Polling.
+- [ ] Vorhandenen Betriebsstatus und LWT in den Dauerlauf integrieren; Credential-Prüfung mindestens täglich ausführen und Status vor API-Abrufen verfügbar machen.
 - [ ] Die vorhandene endpunktbezogene Diagnose aus dem Einmallauf in das dauerhafte Polling einbinden und über mehrere Zyklen testen; übersprungene NoData-Endpunkte behalten ihren Diagnosezeitstempel, ein späterer Erfolg setzt den Zustand auf `OK`.
 - [ ] Das bisherige `wait_and_die()` entfernen.
 - [ ] Temporäre API-Fehler ohne Prozessende behandeln.

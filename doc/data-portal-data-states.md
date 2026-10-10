@@ -112,6 +112,8 @@ ihre Priorisierung bleibt Aufgabe der Betriebsstatus-Implementierung.
 Der aktuelle lokale Einmallauf validiert Struktur, VIN, SoC und vorhandene
 Quellzeit, publiziert vorhandene skalare Werte einschließlich optionalem `null`
 und wartet auf MQTT-Bestätigungen. Er bereinigt eindeutig verwaltete retained Topics mit einem dauerhaften
-Wiederanlaufprotokoll. Er vergleicht noch keine Quellzeit-Historie, schreibt keine
-Container-Statuswerte und baut keine separate openWB-Verbindung auf. Diese Punkte
+Wiederanlaufprotokoll. Er publiziert Container-Statuswerte, Credential-Zustand und Offline-LWT.
+Im Fehlerstatus fasst er Daten-/API-Fehler derzeit als `api_partial` beziehungsweise
+`api_failed` zusammen; die differenzierten Codes der Zieltabelle oben sind noch
+nicht vollständig umgesetzt. Quellzeit-Historie und separate openWB-Verbindung
 bleiben in M6/M7 offen. Lösch-Publishes sind von der Nutzwert-Serialisierung getrennt.

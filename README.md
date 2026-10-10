@@ -159,8 +159,9 @@ See [the mapping documentation](doc/README.md#data-portal-mapping-json-pfad-zu-z
 `./run_soc_check.sh`, `./run_local.sh soc-check`, and `python -m polestar_mqtt.soc_check`
 are compatibility entry points for this same command and **now also publish to MQTT**.
 `./run_local.sh` and `./run_local.sh runonce` use the same Data Portal command. It does not run
-a polling loop, publish container status, or forward separately to
-the openWB broker.
+a polling loop or forward separately to the openWB broker. It publishes
+[operational status and an offline LWT](doc/operations.md#mqtt-betriebsstatus-des-einmallaufs);
+a completed one-shot run is expected to report `offline`.
 
 ## Unit tests
 
@@ -171,6 +172,10 @@ Quick start:
 
 This script creates or reuses `.venv`, installs the test dependencies from `requirements-dev.txt`, runs `pytest`, and then starts a local end-to-end check with `./run_local.sh runonce` when `.env` and `.env_local` are available.
 If one of these files is missing, the end-to-end step is skipped with a clear message.
+
+The separate [MQTT integration checks](tests/integration/README.md) use a temporary
+loopback-only Mosquitto broker and synthetic API data. They are skipped by default
+and can be enabled explicitly with `POLESTAR_MQTT_INTEGRATION=1`.
 
 You can also call pytest directly:
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from threading import Event
 from time import monotonic
 
@@ -12,6 +13,7 @@ from polestar_mqtt.config import ConfigurationError, DataPortalConfig
 from polestar_mqtt.openapi_catalog import (
     aggregate_scopes, build_endpoint_catalog, load_openapi_document,
 )
+from polestar_mqtt.operational_status import OperationalStatus, configure_last_will
 from polestar_mqtt.polestar_api import (
     DataPortalClient, DataPortalHttpClient, DataPortalResponseError, TokenProvider,
     local_error_state,
@@ -64,33 +66,46 @@ def _run_once(config: DataPortalConfig, inventory: ManagedTopicInventory) -> tup
     mapping = load_topic_mapping(config.mqtt_topic_mapping_file, config.mqtt_base_topic)
     battery_path = "/v1/vehicles/{vin}/telemetry/battery"
 
-    with DataPortalHttpClient(config.api_base_url) as http:
-        provider = TokenProvider(http, config.client_id, config.client_secret, scope=scope)
-        api = DataPortalClient(http, provider, config.account_id)
-        api.ensure_vehicle_authorized(config.vin)
-        responses, failures = api.get_catalog(catalog, config.vin)
-        for endpoint_path, payload in list(responses.items()):
-            try:
-                if not isinstance(payload.get("data"), dict):
-                    raise DataPortalResponseError("Endpoint response contains no data object")
-                meta = payload.get("meta", {})
-                if not isinstance(meta, dict):
-                    raise DataPortalResponseError("Endpoint response contains invalid metadata")
-                for section in (payload["data"], meta):
-                    vin = section.get("vin")
-                    if vin is not None and (
-                        not isinstance(vin, str) or vin.strip().upper() != config.vin
-                    ):
-                        raise DataPortalResponseError("Endpoint response VIN does not match")
-                api.extract_source_timestamp(payload)
-                if endpoint_path == battery_path:
-                    api.extract_soc(payload)
-                    api.validate_response_vin(payload, config.vin)
-            except DataPortalResponseError as error:
-                failures[endpoint_path] = "DataPortalResponseError"
-                _, timestamp = api.endpoint_logs[endpoint_path]
-                api.endpoint_logs[endpoint_path] = (local_error_state(error), timestamp)
-                del responses[endpoint_path]
+    responses, failures = {}, {}
+    fatal_error = None
+    battery_timestamp = None
+    source_time_unknown = False
+    endpoint_logs = {}
+    try:
+        with DataPortalHttpClient(config.api_base_url) as http:
+            provider = TokenProvider(http, config.client_id, config.client_secret, scope=scope)
+            api = DataPortalClient(http, provider, config.account_id)
+            api.ensure_vehicle_authorized(config.vin)
+            responses, failures = api.get_catalog(catalog, config.vin)
+            for endpoint_path, payload in list(responses.items()):
+                try:
+                    if not isinstance(payload.get("data"), dict):
+                        raise DataPortalResponseError("Endpoint response contains no data object")
+                    meta = payload.get("meta", {})
+                    if not isinstance(meta, dict):
+                        raise DataPortalResponseError("Endpoint response contains invalid metadata")
+                    for section in (payload["data"], meta):
+                        vin = section.get("vin")
+                        if vin is not None and (
+                            not isinstance(vin, str) or vin.strip().upper() != config.vin
+                        ):
+                            raise DataPortalResponseError("Endpoint response VIN does not match")
+                    api.extract_source_timestamp(payload)
+                    if endpoint_path == battery_path:
+                        api.extract_soc(payload)
+                        api.validate_response_vin(payload, config.vin)
+                except DataPortalResponseError as error:
+                    failures[endpoint_path] = "DataPortalResponseError"
+                    _, timestamp = api.endpoint_logs[endpoint_path]
+                    api.endpoint_logs[endpoint_path] = (local_error_state(error), timestamp)
+                    del responses[endpoint_path]
+            endpoint_logs = api.endpoint_logs
+            if battery_path in responses:
+                battery_timestamp = endpoint_logs[battery_path][1]
+                source_time_unknown = api.extract_source_timestamp(responses[battery_path]) is None
+    except Exception as error:
+        fatal_error = error
+        responses, failures = {}, {}
 
     publications = []
     dynamic_topics = set()
@@ -127,10 +142,10 @@ def _run_once(config: DataPortalConfig, inventory: ManagedTopicInventory) -> tup
     })
     log_publications = []
     for endpoint in catalog:
-        if endpoint.path_template not in api.endpoint_logs:
+        if endpoint.path_template not in endpoint_logs:
             continue
         root = config.mqtt_base_topic.rstrip("/") + endpoint.topic_root + "/log"
-        state, timestamp = api.endpoint_logs[endpoint.path_template]
+        state, timestamp = endpoint_logs[endpoint.path_template]
         for name, value in (("state", state), ("timestamp", timestamp)):
             topic = root + "/" + name
             validate_publish_topic(topic)
@@ -145,10 +160,14 @@ def _run_once(config: DataPortalConfig, inventory: ManagedTopicInventory) -> tup
         connected.set()
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, reconnect_on_failure=False)
+    configure_last_will(client, config.mqtt_base_topic)
     client.connect_timeout = MQTT_TIMEOUT_SECONDS
     client.on_connect = on_connect
     if config.mqtt_user:
         client.username_pw_set(config.mqtt_user, config.mqtt_password)
+    status = None
+    primary_error = None
+    graceful_disconnect = True
     try:
         if client.connect(
             config.mqtt_broker, config.mqtt_port, config.mqtt_keepalive,
@@ -161,6 +180,12 @@ def _run_once(config: DataPortalConfig, inventory: ManagedTopicInventory) -> tup
         if not accepted:
             raise MqttRunError("MQTT connection rejected")
         publisher = ConfirmedPublisher(client)
+        status = OperationalStatus(publisher, config)
+        status.start()
+        status.result(battery_timestamp=battery_timestamp, failures=failures,
+                      fatal_error=fatal_error, source_time_unknown=source_time_unknown)
+        if fatal_error is not None:
+            raise fatal_error
         topics = []
         for topic, value in log_publications:
             publisher.publish(topic, value, qos=1, retain=True)
@@ -180,12 +205,39 @@ def _run_once(config: DataPortalConfig, inventory: ManagedTopicInventory) -> tup
                 inventory.finish(endpoint_path, desired)
         if not dynamic_topics:
             raise DataPortalResponseError("No publishable endpoint data is available")
-        return len(topics), len(failures)
+        return len(topics) + status.count + 1, len(failures)
+    except Exception as error:
+        primary_error = error
+        if (status is not None and fatal_error is None
+                and not isinstance(error, DataPortalResponseError)):
+            try:
+                status.failure(error)
+            except Exception:
+                pass
+        raise
     finally:
         try:
-            client.disconnect()
+            if status is not None:
+                try:
+                    status.stop()
+                except Exception:
+                    graceful_disconnect = False
+                    if primary_error is None:
+                        raise
         finally:
-            client.loop_stop()
+            try:
+                if graceful_disconnect:
+                    client.disconnect()
+                else:
+                    # A normal DISCONNECT would cancel the offline will after a failed publish.
+                    connection = client.socket()
+                    if connection is not None:
+                        try:
+                            connection.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+            finally:
+                client.loop_stop()
 
 
 def main() -> int:

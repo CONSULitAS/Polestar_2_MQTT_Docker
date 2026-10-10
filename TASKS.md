@@ -11,13 +11,17 @@ Die regulären Startwege verwenden vorerst den Data-Portal-Einmallauf.
 ## Offene Laufzeitaufgaben
 
 - [ ] Dauerhaftes Polling, Fehlererholung und sauberes Herunterfahren (M7).
-- [ ] MQTT-Reconnect, Container-Status und LWT in der neuen Laufzeit umsetzen.
+- [ ] Automatischen MQTT-Reconnect und Wiederveröffentlichung im Dauerbetrieb umsetzen; Container-Status und LWT im Einmallauf sind abgeschlossen.
 - [ ] Docker-HEALTHCHECK implementieren und im Dockerfile einbinden.
 - [ ] Separate OpenWB-Weiterleitung einschließlich konfigurierbarem Ziel-Topic umsetzen.
 - [ ] Telemetrie-/Response-Validierung und strukturierte Diagnose weiter härten.
 - [ ] Container-/Release-Abnahme gemäß M8/M8A/M9 abschließen.
 
 ## Chronologischer Verlauf
+
+- [x] 2026-10-10: Betriebsstatus und Offline-LWT im Einmallauf umgesetzt: gültiger Battery-Abrufzeitpunkt, redigierte Fehlercodes und Exception-Typen sowie Credential-Status. Ruff und 414 Unit-Tests, vier MQTT-Integrationstests einschließlich LWT nach Prozessabbruch und lokaler API-/MQTT-Lauf mit 278 bestätigten Publishes erfolgreich. Dauerlauf-Integration separat offen.
+
+- [x] 2026-10-10: Separaten MQTT-Testbroker-Nachweis für den Einmallauf ergänzt und bestanden: drei Mosquitto-Integrationstests für retained Werte, Löschungen, geschützte Topics, Subscriber-Reconnect, Broker-Neustart und NoData-Erholung. Ruff und 405 Unit-Tests erfolgreich; lokaler API-/MQTT-Lauf bestätigt. Automatischer Publisher-Reconnect im Dauerbetrieb bleibt offen.
 
 - [x] 2026-10-10: Container-Persistenzabnahme für M6.2 auf Commit `50d86d7` bestanden: UID-999-Schreibrechte, atomare Speicherung, Neustart, Sperre zwischen Containern, Wiederaufnahme nach SIGKILL und unverändertes Inventar bei schreibgeschütztem Mount. Letzten M6.2-Punkt geschlossen; separater Testbroker-Nachweis in M6.4 bleibt offen.
 

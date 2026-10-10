@@ -66,10 +66,10 @@ def test_runonce_confirms_all_topics_and_logs_no_vehicle_data(run_setup, capsys)
     assert main() == 0
     output = capsys.readouterr().out
     assert json.loads(output) == {
-        "data_portal": "successful", "mqtt": "acknowledged", "topics": 34,
+        "data_portal": "successful", "mqtt": "acknowledged", "topics": 42,
     }
-    assert info.wait_for_publish.call_count == 34
-    assert info.is_published.call_count == 34
+    assert info.wait_for_publish.call_count == 42
+    assert info.is_published.call_count == 42
     for invocation in client.publish.call_args_list:
         assert invocation.args[0].startswith("polestar2-test/")
         assert invocation.kwargs == {"qos": 1, "retain": True}
@@ -89,7 +89,7 @@ def test_runonce_loads_mapping_and_publishes_additional_value(run_setup, tmp_pat
     )
     assert main() == 0
     client.publish.assert_any_call("polestar2-test/extra/soc", "50", qos=1, retain=True)
-    assert client.publish.call_count == 35
+    assert client.publish.call_count == 43
 
 
 @pytest.mark.parametrize("failure", ["publish", "ack", "connect", "timeout"])
@@ -107,7 +107,11 @@ def test_mqtt_failure_returns_error_and_closes_client(run_setup, monkeypatch, fa
         client.connect.return_value = 0
         monkeypatch.setattr(runonce, "MQTT_TIMEOUT_SECONDS", 0)
     assert main() == 1
-    client.disconnect.assert_called_once()
+    if failure in {"publish", "ack"}:
+        client.disconnect.assert_not_called()
+        client.socket.return_value.shutdown.assert_called_once()
+    else:
+        client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
 
 
@@ -160,7 +164,8 @@ def test_inventory_contains_dynamic_and_mapping_topics_only(run_setup, tmp_path)
     assert inventory["version"] == 3
     assert inventory["unassigned_topics"] == []
     assert inventory["endpoints"]["/v1/vehicles/{vin}/telemetry/battery"] == sorted(
-        call.args[0] for call in client.publish.call_args_list if "/log/" not in call.args[0]
+        call.args[0] for call in client.publish.call_args_list
+        if "/log/" not in call.args[0] and "/container/" not in call.args[0]
     )
     assert sum(len(topics) for topics in inventory["endpoints"].values()) == 5
 
@@ -171,7 +176,7 @@ def test_partial_publication_preserves_previous_inventory(run_setup, tmp_path) -
     state = tmp_path / "state.json"
     previous = '{"version":1,"topics":["old/topic"]}'
     state.write_text(previous)
-    info.is_published.side_effect = [True] * 31 + [False]
+    info.is_published.side_effect = [True] * 38 + [False]
     assert main() == 1
     saved = json.loads(state.read_text())
     assert saved["unassigned_topics"] == ["old/topic"]
@@ -296,10 +301,10 @@ def test_other_endpoint_failure_still_publishes_valid_battery(
     assert main() == 0
     summary = json.loads(capsys.readouterr().out)
     assert summary == {
-        "data_portal": "partial", "mqtt": "acknowledged", "topics": 34,
+        "data_portal": "partial", "mqtt": "acknowledged", "topics": 42,
         "failed_endpoints": 1,
     }
-    assert client.publish.call_count == 34
+    assert client.publish.call_count == 42
     assert (tmp_path / "state.json").is_file()
     assert requests_mock.call_count == 17
 
@@ -408,7 +413,7 @@ def test_later_publish_failure_preserves_confirmed_endpoint_update(
         DEFAULT_POLESTAR_API_BASE_URL + early.replace("{vin}", "LPSVS000000000000"),
         json={"data": {"value": 16}},
     )
-    info.is_published.side_effect = [True] * 32 + [False]
+    info.is_published.side_effect = [True] * 39 + [False]
     assert main() == 1
     endpoints = json.loads(state.read_text())["endpoints"]
     assert endpoints[battery] == ["old/battery"]
@@ -546,9 +551,10 @@ def test_transport_error_is_published_as_safe_local_diagnostic(
 # Nicht bestätigte Diagnose-Publishes verhindern einen erfolgreichen Abschluss.
 def test_log_ack_failure_fails_before_telemetry(run_setup, tmp_path):
     client, info, _, _ = run_setup
-    info.is_published.side_effect = [True, False]
+    info.is_published.side_effect = [True] * 8 + [False]
     assert main() == 1
-    assert all("/log/" in call.args[0] for call in client.publish.call_args_list)
+    assert all("/log/" in call.args[0] or "/container/" in call.args[0]
+               for call in client.publish.call_args_list)
     assert not (tmp_path / "state.json").exists()
 
 
@@ -570,7 +576,8 @@ def test_cleanup_removes_only_obsolete_topics(run_setup, requests_mock, tmp_path
     requests_mock.get(battery_url, json=original)
     client.reset_mock()
     assert main() == 0
-    deletions = [call.args[0] for call in client.publish.call_args_list if call.args[1] == ""]
+    deletions = [call.args[0] for call in client.publish.call_args_list
+                 if call.args[1] == "" and "/container/" not in call.args[0]]
     assert set(deletions) == {
         "dedicated/optional", "polestar2-test/telemetry/battery/data/optional",
     }
@@ -653,7 +660,8 @@ def test_invalid_response_keeps_retained_inventory(run_setup, requests_mock, tmp
     requests_mock.get(url, json=payload)
     client.reset_mock()
     assert main() == 0
-    assert not any(call.args[1] == "" for call in client.publish.call_args_list)
+    assert not any(call.args[1] == "" and "/container/" not in call.args[0]
+                   for call in client.publish.call_args_list)
     assert json.loads((tmp_path / "state.json").read_text())["endpoints"] == before
 
 
@@ -666,7 +674,8 @@ def test_empty_endpoint_cleans_previous_topics(run_setup, requests_mock):
     requests_mock.get(url, json={"data": {}})
     client.reset_mock()
     assert main() == 0
-    deletions = [call.args[0] for call in client.publish.call_args_list if call.args[1] == ""]
+    deletions = [call.args[0] for call in client.publish.call_args_list
+                 if call.args[1] == "" and "/container/" not in call.args[0]]
     assert deletions == ["polestar2-test/telemetry/exterior/data/old"]
 
 
@@ -681,8 +690,9 @@ def test_journal_write_failure_prevents_telemetry(run_setup, monkeypatch):
 
     monkeypatch.setattr(ManagedTopicInventory, "save", fail_save)
     assert main() == 1
-    assert client.publish.call_count == 30
-    assert all("/log/" in call.args[0] for call in client.publish.call_args_list)
+    assert sum("/log/" in call.args[0] for call in client.publish.call_args_list) == 30
+    assert all("/log/" in call.args[0] or "/container/" in call.args[0]
+               for call in client.publish.call_args_list)
 
 
 # Nach einem Abbruch bleibt der Vorgang bei API-Fehlern unangetastet.
@@ -705,4 +715,73 @@ def test_failed_endpoint_does_not_resume_pending_deletions(run_setup, requests_m
     assert after["pending"] == before["pending"]
     assert after["intended"] == before["intended"]
     assert after["endpoints"][endpoint] == before["endpoints"][endpoint]
-    assert not any(call.args[1] == "" for call in client.publish.call_args_list)
+    assert not any(call.args[1] == "" and "/container/" not in call.args[0]
+                   for call in client.publish.call_args_list)
+
+
+# LWT wird vor CONNECT gesetzt; der Einmallauf endet mit bestätigtem Offline-Status.
+def test_operational_status_and_last_will(run_setup, tmp_path):
+    client, _, _, _ = run_setup
+    assert main() == 0
+    client.will_set.assert_called_once_with(
+        "polestar2-test/container/connected", "offline", qos=1, retain=True,
+    )
+    methods = [call[0] for call in client.method_calls]
+    assert methods.index("will_set") < methods.index("connect")
+    states = [call.args[1] for call in client.publish.call_args_list
+              if call.args[0] == "polestar2-test/container/connected"]
+    assert states == ["online", "offline"]
+    assert client.publish.call_args.args == ("polestar2-test/container/connected", "offline")
+    client.publish.assert_any_call(
+        "polestar2-test/container/credentials/client_secret_status", "ok", qos=1, retain=True,
+    )
+    assert "/container/" not in (tmp_path / "state.json").read_text()
+
+
+# Last-update ist die Abrufzeit; bei ungültiger Battery wird der retained Wert nicht ersetzt.
+def test_last_update_only_for_valid_battery(run_setup, requests_mock):
+    from datetime import UTC, datetime
+
+    client, _, _, url = run_setup
+    before = datetime.now(UTC)
+    assert main() == 0
+    after = datetime.now(UTC)
+    value = next(call.args[1] for call in client.publish.call_args_list
+                 if call.args[0].endswith("/container/last_update"))
+    assert before <= datetime.fromisoformat(value) <= after
+    requests_mock.get(url, json={"data": {}, "meta": {"vin": "LPSVS000000000000"}})
+    client.reset_mock()
+    assert main() == 1
+    assert not any(call.args[0].endswith("/container/last_update")
+                   for call in client.publish.call_args_list)
+
+
+# Tokenfehler erreichen MQTT ausschließlich als lokaler Code und Exception-Typ.
+def test_auth_failure_publishes_redacted_status(run_setup, requests_mock):
+    client, _, _, _ = run_setup
+    requests_mock.post(DEFAULT_POLESTAR_API_BASE_URL + "/token", status_code=401,
+                       json={"error": "client-secret LPSVS000000000000 access-token-value"})
+    assert main() == 1
+    client.publish.assert_any_call(
+        "polestar2-test/container/last_error", "api_failed", qos=1, retain=True,
+    )
+    for call in client.publish.call_args_list:
+        assert "/container/" in call.args[0]
+        for secret in ("client-secret", "LPSVS000000000000", "access-token-value"):
+            assert secret not in call.args[1]
+
+
+# Ein nicht bestätigtes Offline-Publish darf das Broker-LWT nicht durch DISCONNECT aufheben.
+def test_offline_ack_failure_keeps_will_active(run_setup):
+    client, info, _, _ = run_setup
+
+    def publish(topic, payload, **kwargs):
+        if topic.endswith("/container/connected") and payload == "offline":
+            return Mock(rc=0, is_published=Mock(return_value=False))
+        return info
+
+    client.publish.side_effect = publish
+    assert main() == 1
+    client.disconnect.assert_not_called()
+    client.socket.return_value.shutdown.assert_called_once()
+    client.loop_stop.assert_called_once()
