@@ -505,17 +505,33 @@ daher kein erneuter vollständiger Test- oder Live-Lauf.
 ### M6.2 – Bestätigte Veröffentlichung und dauerhaftes Topic-Inventar
 
 - [x] Die zuletzt erfolgreich publizierte Menge der verwalteten dynamischen und Mapping-Topics in einer lokalen Zustandsdatei außerhalb des Containers persistieren.
-- [ ] Die Zustandsdatei über `local-files` dauerhaft in den Container einbinden und atomar aktualisieren, damit Container-Neustarts die Topic-Historie nicht verlieren.
-- [ ] Nach einer fachlich validierten API-Antwort die zuvor persistierten Topics mit der gemäß Entscheidungstabelle aktuell erzeugten Topic-Menge vergleichen; Transportfehler und abgelehnte Antworten dürfen keine Inventarbereinigung auslösen.
-- [ ] Nicht mehr erzeugte verwaltete Topics mit einem leeren retained Publish (Zero-Length-Payload) und QoS 1 aus dem Broker löschen.
-- [ ] Vor dem ersten Publish einen ausstehenden Vorgang mit bisheriger und beabsichtigter Topic-Menge dauerhaft speichern. Die neue Topic-Menge erst als abgeschlossen übernehmen, nachdem alle aktuellen Publishes und erforderlichen Lösch-Publishes erfolgreich bestätigt wurden; Wiederaufnahme nach Absturz idempotent gestalten.
-- [ ] Bestätigungen und deren Timeouts ausdrücklich auswerten; ein Aufruf von `publish()` allein gilt nicht als erfolgreiche Zustellung.
-- [ ] Das Inventar versionieren und an Broker sowie Publisher-Instanz binden. Verhalten bei Wechsel von Broker oder `MQTT_BASE_TOPIC`, fehlender oder beschädigter Zustandsdatei und parallelen Instanzen festlegen; bei unklarer Zuständigkeit keine Topics löschen.
-- [ ] Exklusive Zuständigkeit für dynamische und zusätzliche Mapping-Ziele dokumentieren, insbesondere für absolute Ziele außerhalb von `MQTT_BASE_TOPIC`; eine Inventaraufnahme allein begründet kein Eigentum an fremden Topics.
-- [ ] Ausschließlich vom Telemetrie-Publisher verwaltete dynamische und Mapping-Topics löschen; Containerstatus-, Credential- und fremde Topics niemals aus dem Inventar ableiten oder entfernen.
-- [ ] `<base>/container` einschließlich aller Unterpfade als stabile, separat verwaltete Betriebs- und Statusschnittstelle schützen (MQTT-Filter `<base>/container/#`); diesen Bereich weder dynamisch aus API-JSON erzeugen noch in das Telemetrie-Topic-Inventar aufnehmen.
-- [ ] Relative und absolute Mapping-Ziele im gesamten geschützten Container-Namespace ablehnen.
-- [ ] Den Umgang mit alten retained GraphQL-Topics dokumentieren: Sie gehören nicht automatisch zum neuen Inventar. Eine gezielte manuelle Bereinigung erläutern; keine pauschale Löschung des bisherigen Topic-Baums vorsehen.
+- [x] Die lokale Zustandsdatei atomar ersetzen und Datei sowie Verzeichnis vor Telemetrie-Publishes synchronisieren.
+- [ ] Dauerhafte Einbindung über `local-files`, Schreibrechte und Erhalt des Inventars nach Container-Neustart im Container-Abnahme-Gate prüfen.
+- [x] Nach einer fachlich validierten API-Antwort die zuvor persistierten Topics mit der nach den Feldregeln der Entscheidungstabelle aktuell erzeugten Topic-Menge vergleichen; Transportfehler und abgelehnte Antworten dürfen keine Inventarbereinigung auslösen.
+- [x] Nicht mehr erzeugte verwaltete Topics mit einem leeren retained Publish (Zero-Length-Payload) und QoS 1 aus dem Broker löschen.
+- [x] Vor dem ersten Telemetrie-Publish einer geänderten Topic-Menge einen ausstehenden Vorgang mit bisheriger und beabsichtigter Topic-Menge dauerhaft speichern. Die neue Topic-Menge erst als abgeschlossen übernehmen, nachdem alle aktuellen Publishes und erforderlichen Lösch-Publishes erfolgreich bestätigt wurden; Wiederaufnahme nach Absturz idempotent gestalten.
+- [x] Bestätigungen und deren Timeouts ausdrücklich auswerten; ein Aufruf von `publish()` allein gilt nicht als erfolgreiche Zustellung.
+- [x] Das Inventar versionieren und an Broker sowie Publisher-Instanz binden. Verhalten bei Wechsel von Broker oder `MQTT_BASE_TOPIC`, fehlender oder beschädigter Zustandsdatei und parallelen Instanzen festlegen; bei unklarer Zuständigkeit keine Topics löschen.
+- [x] Exklusive Zuständigkeit für dynamische und zusätzliche Mapping-Ziele dokumentieren, insbesondere für absolute Ziele außerhalb von `MQTT_BASE_TOPIC`; eine Inventaraufnahme allein begründet kein Eigentum an fremden Topics.
+- [x] Ausschließlich vom Telemetrie-Publisher verwaltete dynamische und Mapping-Topics löschen; Containerstatus-, Credential- und fremde Topics niemals aus dem Inventar ableiten oder entfernen.
+- [x] Bei Umsetzung der Retained-Bereinigung den endpunktbezogenen `log`-Unterbaum ausdrücklich vor Löschungen schützen und durch Regressionstests absichern; die Diagnose-Topics sind bereits aus dem aktuellen Telemetrie-Inventar ausgeschlossen.
+- [x] `<base>/container` einschließlich aller Unterpfade als stabile, separat verwaltete Betriebs- und Statusschnittstelle schützen (MQTT-Filter `<base>/container/#`); diesen Bereich weder dynamisch aus API-JSON erzeugen noch in das Telemetrie-Topic-Inventar aufnehmen.
+- [x] Relative und absolute Mapping-Ziele im gesamten geschützten Container-Namespace ablehnen.
+- [x] Den Umgang mit alten retained GraphQL-Topics dokumentieren: Sie gehören nicht automatisch zum neuen Inventar. Eine gezielte manuelle Bereinigung erläutern; keine pauschale Löschung des bisherigen Topic-Baums vorsehen.
+
+**QS-Nachweis Retained-Bereinigung vom 10.10.2026:** Basis `52d721f` mit
+lokalen Änderungen an Publisher, Einmallauf, Inventar, Tests und Dokumentation.
+`./run_tests.sh`: Ruff erfolgreich, 405 Tests bestanden, Exit-Code 0.
+Der enthaltene lokale Data-Portal-Einmallauf bestätigte 270 MQTT-Publishes;
+ein Endpunkt meldete `404 DATA_NOT_AVAILABLE`, Gesamtergebnis `partial`.
+Unit-Tests prüfen entfallene dynamische und absolute Mapping-Ziele, `null`,
+gültige leere Antworten, abgelehnte Antworten, geschützte Namespaces, Broker- und
+Publisher-Wechsel, Sperren sowie Wiederaufnahme nach simulierten Publish-,
+Lösch- und Abschlussfehlern. Version 3 speichert bestätigte, möglicherweise
+zugestellte und beabsichtigte Topic-Mengen; Altinventare bleiben ohne Löschrecht
+erhalten. Der lokale Live-Lauf ist kein Testbroker-Nachweis für Löschungen oder
+Reconnect. Container-Persistenzabnahme und separater Broker-Integrationstest
+bleiben offen. Quellzeit-Rückschritte über mehrere Zyklen werden in M7 geprüft.
 
 **QS-Nachweis lokale Persistenz vom 18.09.2026:** Nach vollständig bestätigten
 Publishes speichert der Einmallauf die eindeutige, sortierte Topic-Menge mit
@@ -533,8 +549,8 @@ bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht a
 
 ### M6.3 – Betriebsstatus, Change Detection und openWB
 
-- [ ] Endpunktbezogene Diagnose gemäß [Konzept](MVP-offizielle-Data-Portal-API.md#endpunktbezogene-log-topics) umsetzen (Nutzervorgabe 2026-10-10): unter jeder Endpunktwurzel `log/state` und `log/timestamp` retained mit QoS 1 publizieren. Bei fachlichem Erfolg `OK`, bei NoData den redigierten Konsolentext, bei anderen Fehlern den redigierten Fehler-JSON-Body als einzelne Payload ausgeben; ohne JSON-Body ein ausdrücklich lokal erzeugtes Fehlerobjekt verwenden. Ergebniszeitpunkt als ISO-8601 in UTC setzen; bei übersprungenen NoData-Endpunkten unverändert lassen.
-- [ ] Den endpunktbezogenen `log`-Unterbaum vor dynamischer Telemetrie, Mapping-Kollisionen und Telemetrie-Inventarbereinigung schützen. Tests für Erfolg, NoData, JSON-Fehlerbody, Fehler ohne JSON-Body, Redigierung, ISO-Zeitstempel und Fehlererholung ergänzen.
+- [x] Endpunktbezogene Diagnose im Data-Portal-Einmallauf gemäß [Konzept](MVP-offizielle-Data-Portal-API.md#endpunktbezogene-log-topics) umsetzen (Nutzervorgabe 2026-10-10): unter jeder Endpunktwurzel `log/state` und `log/timestamp` retained mit QoS 1 publizieren. Bei fachlichem Erfolg `OK`, bei NoData den redigierten Konsolentext, bei anderen Fehlern den redigierten Fehler-JSON-Body als einzelne Payload ausgeben; ohne JSON-Body ein ausdrücklich lokal erzeugtes Fehlerobjekt verwenden. Ergebniszeitpunkt als ISO-8601 in UTC setzen; bei übersprungenen NoData-Endpunkten unverändert lassen.
+- [x] Den endpunktbezogenen `log`-Unterbaum vor dynamischer Telemetrie und Mapping-Kollisionen schützen sowie aus dem Telemetrie-Inventar ausschließen. Tests für Erfolg, NoData, JSON-Fehlerbody, Fehler ohne JSON-Body, Redigierung, ISO-Zeitstempel und Fehlererholung ergänzen.
   - 2026-10-10: Diagnoseausgabe im Data-Portal-Einmallauf umgesetzt: `log/state`
     und `log/timestamp` für jeden tatsächlich abgerufenen Katalogendpunkt,
     bestätigt mit QoS 1 und Retain. API-Client stellt redigierte Fehlerbodies
@@ -551,6 +567,10 @@ bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht a
     Einbindung in den dauerhaften Polling-Ablauf und Schutz in der noch
     ausstehenden Retained-Bereinigung bleiben offen; daher bleiben die
     übergreifenden Aufgaben noch unvollständig.
+  - 2026-10-10: Aufgabenstatus abgeglichen: Die oben nachgewiesene Diagnose im
+    Einmallauf und ihre vorhandenen Schutzmechanismen sind abgeschlossen.
+    Die verbleibende Integration wird separat unter M6.2 und M7 geführt;
+    der vorstehende QS-Nachweis bleibt als historischer Stand erhalten.
 - [ ] Bestehendes LWT unter `<base>/container/connected` beibehalten.
 - [ ] `<base>/container/last_update` als Zeitpunkt des letzten fachlich erfolgreichen Battery-Abrufs definieren und nur dann aktualisieren. Abrufzeit, Quellzeit und MQTT-Zustellstatus unterscheiden; ein alter Quellzeitstempel darf nicht als neue Messung dargestellt werden.
 - [ ] Redigierten Fehlerstatus unter `<base>/container/last_error` bereitstellen.
@@ -568,9 +588,10 @@ bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht a
 
 ### M6.4 – QS und Abnahme
 
-- [ ] Tests mit gemocktem MQTT-Client für rekursive dynamische Topics, neue JSON-Felder, Mapping auf mehrere Ziele, fehlende und ungültige Mapping-Dateien, persistiertes Topic-Inventar, verwaiste retained Topics, Payload, QoS und Retain ergänzen.
-- [ ] Regressionstests für Zielkollisionen, geschützte Unterpfade, Teilantworten, `null`, veraltete Messwerte, Zustellfehler und beschädigte oder nicht zuordenbare Inventare ergänzen.
-- [ ] Abstürze vor und nach einzelnen Publishes, Löschungen und Inventarabschlüssen testen; nach Neustart dürfen auch bereits zugestellte neue Topics nicht aus der Bereinigung verloren gehen.
+- [x] Tests mit gemocktem MQTT-Client für rekursive dynamische Topics, neue JSON-Felder, Mapping auf mehrere Ziele, fehlende und ungültige Mapping-Dateien, persistiertes Topic-Inventar, verwaiste retained Topics, Payload, QoS und Retain ergänzen.
+- [x] Regressionstests für Zielkollisionen, geschützte Unterpfade, Teilantworten, `null`, Zustellfehler und beschädigte oder nicht zuordenbare Inventare ergänzen.
+- [ ] Regressionstests für Quellzeit-Rückschritte über mehrere Zyklen mit M7 ergänzen.
+- [x] Abbrüche vor Telemetrie-Publishes, bei Publish-/Löschbestätigungen und vor Inventarabschluss durch Fehler-Injektion testen; nach Neustart dürfen auch bereits zugestellte neue Topics nicht aus der Bereinigung verloren gehen.
 - [ ] Einen getrennten Integrationstest mit lokalem Testbroker für retained Werte, bestätigte Löschungen, Reconnect und Wiederveröffentlichung durchführen; Unit-Tests weiterhin ohne Netzwerkzugriff ausführen.
 
 **Abnahme:** Die MQTT-Ausgabe bildet die gelieferte JSON-Struktur ohne fest codierte
@@ -626,6 +647,7 @@ Es wurde kein Container gebaut oder gestartet.
 **Abhängigkeiten:** M5, M6
 
 - [ ] Startreihenfolge festlegen: Konfiguration, MQTT, Credential-Status, Token, VIN-Prüfung, Polling.
+- [ ] Die vorhandene endpunktbezogene Diagnose aus dem Einmallauf in das dauerhafte Polling einbinden und über mehrere Zyklen testen; übersprungene NoData-Endpunkte behalten ihren Diagnosezeitstempel, ein späterer Erfolg setzt den Zustand auf `OK`.
 - [ ] Das bisherige `wait_and_die()` entfernen.
 - [ ] Temporäre API-Fehler ohne Prozessende behandeln.
 - [ ] Ungültige lokale Konfiguration wie in M2 beim Start ablehnen. Berechtigungs- und Credential-Fehler zur Laufzeit klar kennzeichnen und mit langsamem Retry behandeln, damit MQTT-Status beobachtbar bleibt.
@@ -637,6 +659,7 @@ Es wurde kein Container gebaut oder gestartet.
 - [ ] SIGTERM-Verarbeitung und MQTT-Disconnect beibehalten bzw. testen.
 - [ ] Polling-, Backoff- und `Retry-After`-Wartezeiten unterbrechbar gestalten; SIGTERM während langer Wartezeiten und laufender Requests innerhalb einer dokumentierten Shutdown-Frist testen.
 - [ ] Systemzeitänderungen dürfen die Access-Token-Frist nicht verfälschen; monotone Zeit verwenden.
+- [ ] Quellzeit-Rückschritte gegenüber dem zuletzt akzeptierten Stand über mehrere Polling-Zyklen ablehnen; weder Telemetrie noch Inventarbereinigung für diese Antwort ausführen.
 - [ ] Integrationstests für mehrere Polling-Zyklen, Token-Erneuerung und Fehlererholung ergänzen.
 
 **Abnahme:** Der Dienst läuft nach temporären HTTP- und MQTT-Problemen weiter und beendet sich bei SIGTERM sauber.

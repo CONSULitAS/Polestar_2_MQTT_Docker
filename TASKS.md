@@ -19,6 +19,10 @@ Die regulären Startwege verwenden vorerst den Data-Portal-Einmallauf.
 
 ## Chronologischer Verlauf
 
+- [x] 2026-10-10: Retained-Bereinigung im Einmallauf umgesetzt: gebundenes Inventar v3, bestätigte Löschungen, Wiederaufnahme offener Vorgänge und Schutz von Diagnose-/Container-Topics. Ruff und 405 Tests erfolgreich; lokaler API-/MQTT-Lauf mit 270 bestätigten Publishes und einem NoData-Endpunkt. Erledigte M6.2-/QS-Aufgaben geschlossen; Container-Persistenzabnahme und Testbroker-Integration bleiben separat offen.
+
+- [x] 2026-10-10: Aufgabenstatus der endpunktbezogenen MQTT-Diagnose korrigiert: Ausgabe und Schutzmechanismen im Einmallauf abgeschlossen; verbleibenden Schutz bei Retained-Bereinigung (M6.2) und Polling-Integration (M7) als separate offene Aufgaben erfasst.
+
 - [x] 2026-10-10: HTTP-Fehlerausgaben um den betroffenen Endpunktpfad ergänzt; Fahrzeugkennung und Query-Parameter bleiben verborgen.
 
 - [x] 2026-10-10: Legacy-Laufzeit, GraphQL-Schema/-Vorlage, alte Tests und Node-RED-Beispiel mit `git rm` entfernt. Startwege auf den Data-Portal-Einmallauf umgestellt; Löschdirektive in `AGENTS.md` verschärft. Alte Extraktions-/Login-TODOs entfallen, verbleibende Laufzeitaufgaben sind oben erfasst.

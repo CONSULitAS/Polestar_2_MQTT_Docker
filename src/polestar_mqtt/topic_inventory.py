@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import json
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -66,12 +69,23 @@ def save_topic_inventory(
             unassigned_topics if unassigned_topics is not None else [],
         ),
     }, ensure_ascii=False, sort_keys=True)
+    _save_payload(path, content)
+
+
+def _save_payload(path: Path, content: str) -> None:
     temporary_path = None
     try:
         with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as file:
             temporary_path = Path(file.name)
             file.write(content + "\n")
+            file.flush()
+            os.fsync(file.fileno())
         temporary_path.replace(path)
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
     except OSError:
         raise TopicInventoryError(
             "Topic inventory could not be saved; check directory access"
@@ -82,3 +96,109 @@ def save_topic_inventory(
                 temporary_path.unlink(missing_ok=True)
             except OSError:
                 raise TopicInventoryError("Temporary inventory file could not be removed") from None
+
+
+class ManagedTopicInventory:
+    """Lock and journal the exclusively owned topics for one broker and publisher."""
+
+    def __init__(self, config) -> None:
+        self.path = config.mqtt_topic_state_file
+        identity = [config.mqtt_broker, config.mqtt_port, config.mqtt_base_topic.rstrip("/"),
+                    config.vin, config.account_id]
+        self.identity = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        self.base = config.mqtt_base_topic.rstrip("/")
+        self.endpoints: dict[str, list[str]] = {}
+        self.pending: dict[str, list[str]] = {}
+        self.intended: dict[str, list[str]] = {}
+        self.unassigned: list[str] = []
+        self.lock = None
+
+    def __enter__(self):
+        try:
+            self.lock = self.path.with_name(self.path.name + ".lock").open("a")
+            fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self._load()
+        except (OSError, ValueError):
+            self.__exit__(None, None, None)
+            raise TopicInventoryError("Topic inventory unavailable or already in use") from None
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
+        return self
+
+    def __exit__(self, *args):
+        if self.lock is not None:
+            self.lock.close()
+            self.lock = None
+
+    def _load(self) -> None:
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        if not isinstance(payload, dict) or type(payload.get("version")) is not int:
+            raise TopicInventoryError("Topic inventory has an invalid format")
+        if payload.get("version") != 3:
+            endpoints, unassigned = load_topic_inventory(self.path)
+            self.unassigned = sorted(set(unassigned).union(*map(set, endpoints.values())))
+            return
+        if set(payload) != {
+            "version", "identity", "endpoints", "pending", "intended", "unassigned_topics",
+        }:
+            raise TopicInventoryError("Topic inventory has an invalid format")
+        if payload["identity"] != self.identity:
+            raise TopicInventoryError("Topic inventory belongs to another broker or publisher")
+        self.endpoints = _endpoint_topics(payload["endpoints"])
+        self.pending = _endpoint_topics(payload["pending"])
+        self.intended = _endpoint_topics(payload["intended"])
+        if self.pending.keys() != self.intended.keys() or any(
+            not set(topics) <= set(self.pending[endpoint])
+            for endpoint, topics in self.intended.items()
+        ):
+            raise TopicInventoryError("Topic inventory has an invalid pending operation")
+        self.unassigned = _topic_list(payload["unassigned_topics"])
+        for topics in (*self.endpoints.values(), *self.pending.values()):
+            for topic in topics:
+                self.validate_topic(topic)
+
+    def validate_topic(self, topic: str) -> None:
+        validate_publish_topic(topic)
+        container = self.base + "/container"
+        if topic == container or topic.startswith(container + "/"):
+            raise TopicInventoryError("Telemetry overlaps container namespace")
+        # Reserve all endpoint log trees, including endpoints removed from the catalog.
+        if topic.startswith(self.base + "/"):
+            parts = topic[len(self.base) + 1:].split("/")
+            if len(parts) >= 3 and parts[0] in {"charging", "telemetry"} and parts[2] == "log":
+                raise TopicInventoryError("Telemetry overlaps endpoint log namespace")
+
+    def save(self) -> None:
+        _save_payload(self.path, json.dumps({
+            "version": 3, "identity": self.identity, "endpoints": self.endpoints,
+            "pending": self.pending, "intended": self.intended,
+            "unassigned_topics": self.unassigned,
+        }, ensure_ascii=False, sort_keys=True))
+
+    def validate_plan(self, plans: dict[str, list[str]]) -> None:
+        owners = {}
+        for entries in (self.endpoints, self.pending, plans):
+            for endpoint, topics in entries.items():
+                for topic in topics:
+                    self.validate_topic(topic)
+                    if topic in owners and owners[topic] != endpoint:
+                        raise TopicInventoryError("Topic ownership overlaps endpoints")
+                    owners[topic] = endpoint
+
+    def begin(self, endpoint: str, desired: list[str]) -> list[str]:
+        previous = set(self.endpoints.get(endpoint, [])) | set(self.pending.get(endpoint, []))
+        # Keep every possibly delivered topic until the complete transaction is confirmed.
+        self.pending[endpoint] = sorted(previous | set(desired))
+        self.intended[endpoint] = sorted(set(desired))
+        self.save()
+        return sorted(previous - set(desired))
+
+    def finish(self, endpoint: str, desired: list[str]) -> None:
+        self.endpoints[endpoint] = sorted(set(desired))
+        self.pending.pop(endpoint, None)
+        self.intended.pop(endpoint, None)
+        self.save()

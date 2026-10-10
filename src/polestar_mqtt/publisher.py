@@ -236,14 +236,13 @@ def serialize_json_scalar(value: JsonScalar) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def publish_json_topics(
-    client: MqttClient,
+def prepare_json_topics(
     root_topic: str,
     value: object,
     *,
     mapping: TopicMapping | None = None,
-) -> list[str]:
-    """Publish dynamic leaves plus JSON values mapped to resolved MQTT targets."""
+) -> list[TopicValue]:
+    """Plan dynamic and mapped scalar topics before any publication."""
 
     topics = flatten_json_topics(root_topic, value)
     for topic, _ in topics:
@@ -276,7 +275,20 @@ def publish_json_topics(
                     mapped_topics.add(topic)
                     topics.append((topic, current))
 
+    return topics
+
+
+def publish_json_topics(
+    client: MqttClient,
+    root_topic: str,
+    value: object,
+    *,
+    mapping: TopicMapping | None = None,
+) -> list[str]:
+    """Publish dynamic leaves plus JSON values mapped to resolved MQTT targets."""
+
     published_topics: list[str] = []
+    topics = prepare_json_topics(root_topic, value, mapping=mapping)
     for topic, scalar in topics:
         client.publish(
             topic,

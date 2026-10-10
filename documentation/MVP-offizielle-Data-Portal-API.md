@@ -238,7 +238,7 @@ Felder werden nicht durch `null` ersetzt. Explizites JSON-`null` wird als Text
 dies löscht keinen retained Wert. Ein leerer String wird als zwei
 Anführungszeichen (`""`) übertragen. Ausschließlich ein separater retained Publish
 mit Zero-Length-Payload entfernt einen bisherigen retained Wert; diese Bereinigung
-wird über das geplante Topic-Inventar gesteuert.
+wird im Einmallauf über das gebundene Topic-Inventar gesteuert.
 
 Für dynamische und zusätzliche Mapping-Topics gilt derselbe
 [Payload-Vertrag](../doc/data-portal-data-states.md#payload-vertrag): Zahlen als

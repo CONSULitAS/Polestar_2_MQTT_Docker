@@ -83,3 +83,85 @@ def test_inventory_read_error_is_redacted(tmp_path, monkeypatch):
     with pytest.raises(TopicInventoryError) as error:
         load_topic_inventory(tmp_path / "state.json")
     assert "private-path" not in str(error.value)
+
+
+@pytest.fixture
+def managed_config(tmp_path):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        mqtt_topic_state_file=tmp_path / "managed.json", mqtt_broker="broker.test",
+        mqtt_port=1883, mqtt_base_topic="test", vin="LPSVS000000000000", account_id="account",
+    )
+
+
+# Alte Inventare erhalten keinen Löschanspruch ohne Broker- und Instanzzuordnung.
+def test_unbound_inventory_is_migrated_without_deletion_rights(managed_config):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+
+    path = managed_config.mqtt_topic_state_file
+    save_topic_inventory(path, {BATTERY: ["old/topic"]})
+    with ManagedTopicInventory(managed_config) as inventory:
+        assert inventory.endpoints == {}
+        assert inventory.unassigned == ["old/topic"]
+        assert inventory.begin(BATTERY, ["test/new"]) == []
+        inventory.finish(BATTERY, ["test/new"])
+    assert json.loads(path.read_text())["unassigned_topics"] == ["old/topic"]
+
+
+@pytest.mark.parametrize("attribute,value", [
+    ("mqtt_broker", "another.test"), ("mqtt_port", 8883), ("mqtt_base_topic", "other"),
+    ("vin", "LPSVS000000000001"), ("account_id", "other"),
+])
+# Ein Wechsel des Brokers oder Publishers überschreibt kein vorhandenes Inventar.
+def test_identity_change_preserves_inventory(managed_config, attribute, value):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+
+    with ManagedTopicInventory(managed_config) as inventory:
+        inventory.save()
+    before = managed_config.mqtt_topic_state_file.read_text()
+    setattr(managed_config, attribute, value)
+    with pytest.raises(TopicInventoryError):
+        with ManagedTopicInventory(managed_config):
+            pytest.fail("Foreign inventory accepted")
+    assert managed_config.mqtt_topic_state_file.read_text() == before
+
+
+# Eine zweite Instanz scheitert an derselben Sperre; nach Freigabe ist ein Neustart möglich.
+def test_inventory_lock_excludes_parallel_writer(managed_config):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+
+    with ManagedTopicInventory(managed_config):
+        with pytest.raises(TopicInventoryError):
+            with ManagedTopicInventory(managed_config):
+                pytest.fail("Concurrent inventory access accepted")
+    with ManagedTopicInventory(managed_config) as inventory:
+        inventory.save()
+
+
+@pytest.mark.parametrize("topic", [
+    "test/container", "test/container/connected", "test/container/credentials/status",
+    "test/charging/removed/log", "test/telemetry/removed/log/timestamp",
+])
+# Auch manipulierte Inventare dürfen geschützte Status- und Diagnose-Topics nicht löschen.
+def test_protected_inventory_topics_stop_loading(managed_config, topic):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+
+    with ManagedTopicInventory(managed_config) as inventory:
+        inventory.endpoints[BATTERY] = [topic]
+        inventory.save()
+    before = managed_config.mqtt_topic_state_file.read_text()
+    with pytest.raises(TopicInventoryError):
+        with ManagedTopicInventory(managed_config):
+            pytest.fail("Protected inventory accepted")
+    assert managed_config.mqtt_topic_state_file.read_text() == before
+
+
+# Ein Endpunkt darf keine Topics eines fehlgeschlagenen oder entfernten Endpunkts übernehmen.
+def test_plan_cannot_take_another_endpoints_history(managed_config):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+
+    with ManagedTopicInventory(managed_config) as inventory:
+        inventory.endpoints[BATTERY] = ["test/shared"]
+        with pytest.raises(TopicInventoryError):
+            inventory.validate_plan({"/v1/vehicles/{vin}/telemetry/exterior": ["test/shared"]})

@@ -75,8 +75,8 @@ Ein retained Publish mit null Bytes entfernt den bisherigen retained Wert;
 die Texte `null` und `""` tun das nicht. Das folgt aus
 [MQTT 3.1.1, Abschnitt 3.3.1.3](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).
 Lösch-Publishes werden getrennt von der Nutzwert-Serialisierung erzeugt und sind
-erst mit der geplanten Inventarbereinigung verfügbar. Das Fehlen eines Feldes
-allein löst im aktuellen Publisher noch keinen Lösch-Publish aus.
+im Einmallauf über das gebundene Inventar verfügbar. Das Fehlen eines Feldes
+in einer akzeptierten Antwort löst nur für eindeutig verwaltete Topics einen Lösch-Publish aus.
 
 ## Zeitbezug und Datenalter
 
@@ -101,7 +101,7 @@ Eine prozessübergreifende Zeitstempel-Historie ist hier nicht vorausgesetzt.
 Bereinigt werden ausschließlich eindeutig zugeordnete dynamische und Mapping-
 Topics aus dem Telemetrie-Inventar. Betriebsstatus und fremde Topics sind davon
 ausgenommen. Ein HTTP-/Datenfehler erzeugt keine neue leere Sollmenge. Nach
-Zustellfehlern greift die geplante Wiederaufnahme des ausstehenden Inventarvorgangs.
+Zustellfehlern greift beim nächsten erfolgreichen Abruf die Wiederaufnahme des Inventarvorgangs.
 Eine Löschung kann wie ein normaler Publish bereits erfolgt sein, auch wenn ihre
 Bestätigung verloren ging; deshalb sind Wiederholungen idempotent auszuführen.
 
@@ -111,8 +111,7 @@ ihre Priorisierung bleibt Aufgabe der Betriebsstatus-Implementierung.
 
 Der aktuelle lokale Einmallauf validiert Struktur, VIN, SoC und vorhandene
 Quellzeit, publiziert vorhandene skalare Werte einschließlich optionalem `null`
-und wartet auf MQTT-Bestätigungen. Er vergleicht noch keine Quellzeit-Historie,
-bereinigt keine retained Topics, schreibt keine Container-Statuswerte und baut
-keine separate openWB-Verbindung auf. Diese Punkte bleiben in M6/M7 offen.
-Der Payload-Vertrag oben beschreibt die bestehende Serialisierung; die geplanten
-Lösch-Publishes sind davon ausdrücklich getrennt.
+und wartet auf MQTT-Bestätigungen. Er bereinigt eindeutig verwaltete retained Topics mit einem dauerhaften
+Wiederanlaufprotokoll. Er vergleicht noch keine Quellzeit-Historie, schreibt keine
+Container-Statuswerte und baut keine separate openWB-Verbindung auf. Diese Punkte
+bleiben in M6/M7 offen. Lösch-Publishes sind von der Nutzwert-Serialisierung getrennt.

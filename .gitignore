@@ -165,3 +165,4 @@ local-files/graphql_queries.py
 local-files/mqtt_topic_mapping.csv
 
 local-files/mqtt_topic_state.json
+local-files/mqtt_topic_state.json.lock

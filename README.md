@@ -143,15 +143,20 @@ Local runs load `.env` and `.env_local`; the MQTT settings in `.env_local` must 
 intended broker and test topic. Local runs do not read `docker-compose.yml`.
 Optional JSON-path mappings are loaded from `local-files/mqtt_topic_mapping.csv`, or from
 `MQTT_TOPIC_MAPPING_FILE` if set. Absolute mapping targets use their exact configured topic.
-After all publications are acknowledged, topic names are saved to
+Topic names and pending publications are journaled in
 `local-files/mqtt_topic_state.json` (override with `MQTT_TOPIC_STATE_FILE`).
-The parent directory must be writable. This inventory does not yet trigger topic deletion.
+The parent directory must be writable. After a valid endpoint response, obsolete owned
+topics are deleted with acknowledged retained QoS 1 publishes. The inventory is bound to
+the broker and publisher; older unbound inventories never authorize deletions.
+Interrupted operations resume on the next successful read. Publisher instances must own
+disjoint topic namespaces or share the same locked inventory. See the
+[inventory and recovery rules](doc/README.md#data-portal-ausgabe-dynamischer-topic-baum).
 See [the mapping documentation](doc/README.md#data-portal-mapping-json-pfad-zu-zusätzlichem-mqtt-topic).
 
 `./run_soc_check.sh`, `./run_local.sh soc-check`, and `python -m polestar_mqtt.soc_check`
 are compatibility entry points for this same command and **now also publish to MQTT**.
 `./run_local.sh` and `./run_local.sh runonce` use the same Data Portal command. It does not run
-a polling loop, publish container status, delete old retained topics, or forward separately to
+a polling loop, publish container status, or forward separately to
 the openWB broker.
 
 ## Unit tests

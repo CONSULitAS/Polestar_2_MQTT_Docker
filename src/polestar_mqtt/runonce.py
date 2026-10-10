@@ -17,11 +17,11 @@ from polestar_mqtt.polestar_api import (
     local_error_state,
 )
 from polestar_mqtt.publisher import (
-    TopicMappingError, flatten_json_topics, load_topic_mapping, publish_json_topics,
-    validate_mapping_targets, validate_publish_topic,
+    TopicMappingError, flatten_json_topics, load_topic_mapping, prepare_json_topics,
+    serialize_json_scalar, validate_mapping_targets, validate_publish_topic,
 )
 
-from polestar_mqtt.topic_inventory import load_topic_inventory, save_topic_inventory
+from polestar_mqtt.topic_inventory import ManagedTopicInventory
 
 
 MQTT_TIMEOUT_SECONDS = 30.0
@@ -54,10 +54,14 @@ class ConfirmedPublisher:
 def run_once(config: DataPortalConfig) -> tuple[int, int]:
     """Fetch all endpoints and publish successful responses to the broker."""
 
+    with ManagedTopicInventory(config) as inventory:
+        return _run_once(config, inventory)
+
+
+def _run_once(config: DataPortalConfig, inventory: ManagedTopicInventory) -> tuple[int, int]:
     catalog = build_endpoint_catalog(load_openapi_document(config.openapi_file))
     scope = aggregate_scopes(catalog)
     mapping = load_topic_mapping(config.mqtt_topic_mapping_file, config.mqtt_base_topic)
-    inventory, unassigned_topics = load_topic_inventory(config.mqtt_topic_state_file)
     battery_path = "/v1/vehicles/{vin}/telemetry/battery"
 
     with DataPortalHttpClient(config.api_base_url) as http:
@@ -65,17 +69,28 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
         api = DataPortalClient(http, provider, config.account_id)
         api.ensure_vehicle_authorized(config.vin)
         responses, failures = api.get_catalog(catalog, config.vin)
-        battery = responses.get(battery_path)
-        if battery is not None:
+        for endpoint_path, payload in list(responses.items()):
             try:
-                api.extract_soc(battery)
-                api.validate_response_vin(battery, config.vin)
-                api.extract_source_timestamp(battery)
+                if not isinstance(payload.get("data"), dict):
+                    raise DataPortalResponseError("Endpoint response contains no data object")
+                meta = payload.get("meta", {})
+                if not isinstance(meta, dict):
+                    raise DataPortalResponseError("Endpoint response contains invalid metadata")
+                for section in (payload["data"], meta):
+                    vin = section.get("vin")
+                    if vin is not None and (
+                        not isinstance(vin, str) or vin.strip().upper() != config.vin
+                    ):
+                        raise DataPortalResponseError("Endpoint response VIN does not match")
+                api.extract_source_timestamp(payload)
+                if endpoint_path == battery_path:
+                    api.extract_soc(payload)
+                    api.validate_response_vin(payload, config.vin)
             except DataPortalResponseError as error:
-                failures[battery_path] = "DataPortalResponseError"
-                _, timestamp = api.endpoint_logs[battery_path]
-                api.endpoint_logs[battery_path] = (local_error_state(error), timestamp)
-                del responses[battery_path]
+                failures[endpoint_path] = "DataPortalResponseError"
+                _, timestamp = api.endpoint_logs[endpoint_path]
+                api.endpoint_logs[endpoint_path] = (local_error_state(error), timestamp)
+                del responses[endpoint_path]
 
     publications = []
     dynamic_topics = set()
@@ -85,7 +100,7 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
     }
 
     def validate_telemetry_topic(topic: str) -> None:
-        validate_publish_topic(topic)
+        inventory.validate_topic(topic)
         if any(topic == root or topic.startswith(root + "/") for root in log_roots):
             raise TopicMappingError("Telemetry target overlaps endpoint log namespace")
 
@@ -104,8 +119,12 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
                 raise TopicMappingError("Dynamic endpoint topics overlap")
             dynamic_topics.add(topic)
         endpoint_mapping = mapping if endpoint.path_template == battery_path else {}
-        publications.append((endpoint.path_template, root, payload, endpoint_mapping))
+        planned = prepare_json_topics(root, payload, mapping=endpoint_mapping)
+        publications.append((endpoint.path_template, planned))
     validate_mapping_targets(mapping, dynamic_topics)
+    inventory.validate_plan({
+        endpoint: [topic for topic, _ in planned] for endpoint, planned in publications
+    })
     log_publications = []
     for endpoint in catalog:
         if endpoint.path_template not in api.endpoint_logs:
@@ -146,15 +165,19 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
         for topic, value in log_publications:
             publisher.publish(topic, value, qos=1, retain=True)
             topics.append(topic)
-        for endpoint_path, root, payload, endpoint_mapping in publications:
-            confirmed = publish_json_topics(publisher, root, payload, mapping=endpoint_mapping)
-            topics.extend(confirmed)
-            if sorted(set(confirmed)) == inventory.get(endpoint_path, []):
-                continue
-            inventory[endpoint_path] = confirmed
-            save_topic_inventory(
-                config.mqtt_topic_state_file, inventory, unassigned_topics=unassigned_topics,
-            )
+        for endpoint_path, planned in publications:
+            desired = [topic for topic, _ in planned]
+            changed = (sorted(desired) != inventory.endpoints.get(endpoint_path, [])
+                       or endpoint_path in inventory.pending)
+            obsolete = inventory.begin(endpoint_path, desired) if changed else []
+            for topic, value in planned:
+                publisher.publish(topic, serialize_json_scalar(value), qos=1, retain=True)
+                topics.append(topic)
+            for topic in obsolete:
+                publisher.publish(topic, "", qos=1, retain=True)
+                topics.append(topic)
+            if changed:
+                inventory.finish(endpoint_path, desired)
         if not dynamic_topics:
             raise DataPortalResponseError("No publishable endpoint data is available")
         return len(topics), len(failures)

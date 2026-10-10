@@ -19,26 +19,59 @@ Dieser Ordner enthält die technische Projektdokumentation ergänzend zur `READM
 
 ## Data-Portal-Ausgabe: dynamischer Topic-Baum
 
-Der lokale Einmallauf speichert je Endpunkt nach Bestätigung seiner Telemetrie-Publishes
-die tatsächlich publizierten dynamischen und Mapping-Topic-Namen in
-`local-files/mqtt_topic_state.json`. `MQTT_TOPIC_STATE_FILE` kann den Pfad ändern;
-beim direkten Modulstart ist der Default `/local-files/mqtt_topic_state.json`.
-Das übergeordnete Verzeichnis muss existieren und schreibbar sein. Die lokale
-Standarddatei ist von Git ausgeschlossen und enthält ausschließlich eine
-Formatversion, Endpunkt-Pfadtemplates und sortierte eindeutige Topic-Namen,
-keine Payloads oder Credentials. Formatversion 2 ordnet Topics ihrem Endpunkt zu.
-Alte Listen aus Version 1 bleiben als `unassigned_topics` ohne geratene Zuordnung
-erhalten. Fehlende Dateien starten leer; beschädigte Dateien stoppen den Lauf
-vor Netzwerkzugriffen und werden nicht überschrieben.
+Der lokale Einmallauf verwaltet dynamische und zusätzliche Mapping-Topics je
+Endpunkt in `local-files/mqtt_topic_state.json`; `MQTT_TOPIC_STATE_FILE` kann den
+Pfad ändern. Beim direkten Modulstart ist der Default `/local-files/mqtt_topic_state.json`.
+Das Verzeichnis muss existieren und schreibbar sein. Formatversion 3 enthält
+Endpunkt-Pfadtemplates, Topic-Namen, offene Vorgänge und einen SHA-256-Fingerabdruck
+von Brokeradresse, Port, MQTT-Basis, Fahrzeug und Account. Payloads, Credentials
+und die Fahrzeugkennung im Klartext werden nicht gespeichert. Die lokale
+Standarddatei ist von Git ausgeschlossen.
 
-Bei API- oder MQTT-Fehlern bleibt der bisherige Bestand des betroffenen Endpunkts
-erhalten; bereits bestätigte andere Endpunkte werden separat gespeichert.
-Unveränderte Topic-Mengen benötigen keinen erneuten Schreibzugriff. Ein Schreibfehler
-führt zu einem fehlgeschlagenen Einmallauf, auch wenn MQTT bereits bestätigt hat.
-Das Speichern erfolgt über eine temporäre Datei mit anschließendem Ersetzen;
-es ist noch kein vollständiges Wiederanlaufprotokoll. Das Inventar wird derzeit
-noch nicht zur Bereinigung verwaister retained Topics verwendet. Dauerhafte Container-Einbindung,
-Broker-/Instanzzuordnung und Wiederaufnahme nach Prozessabstürzen folgen separat.
+Nach einer akzeptierten Antwort werden aktuelle Werte mit QoS 1 und Retain
+publiziert. Erst nach ihren Bestätigungen werden nicht mehr erzeugte, zuvor
+verwaltete Topics desselben Endpunkts mit leerer retained Payload und QoS 1
+gelöscht. Das gilt auch für entfernte Mapping-Ziele und gültige leere Antworten.
+Explizites `null` bleibt der Text `null`, ein leerer String die Payload `""`.
+HTTP-/Transportfehler, ungültige Datenobjekte, abweichende vorhandene VINs und
+ungültige Quellzeitstempel lösen keine Bereinigung aus. Für Battery bleiben
+zusätzlich SoC- und VIN-Validierung verbindlich. Ein vollständiger Schemaabgleich
+und der zyklusübergreifende Quellzeitvergleich bleiben separate Aufgaben.
+
+Vor geänderten Telemetrie-Publishes wird ein Vorgang mit bisheriger und geplanter
+Topic-Menge gespeichert. Datei und Verzeichnis werden synchronisiert, die Datei
+atomar ersetzt. Erst nach allen Bestätigungen einschließlich Löschungen wird der
+Vorgang abgeschlossen. Nach einem Abbruch berücksichtigt der nächste erfolgreiche
+Abruf auch möglicherweise bereits zugestellte neue Topics; Wiederholungen von
+Publishes und Löschungen sind idempotent. Fehlerhafte Endpunkte behalten ihren
+Bestand und offene Vorgänge. Unveränderte, abgeschlossene Topic-Mengen benötigen
+keinen neuen Schreibzugriff. Ein Schreibfehler beendet den Lauf mit Fehler.
+
+Eine benachbarte `.lock`-Datei sperrt das Inventar während des gesamten Laufs;
+sie bleibt bestehen, ihre Betriebssystem-Sperre wird beim Prozessende freigegeben.
+Gleichzeitige lokale und Container-Läufe müssen dasselbe Inventar samt Sperrdatei
+auf einem Dateisystem mit zuverlässiger Dateisperre verwenden. Getrennte Inventare
+bieten keinen gegenseitigen Schutz: Parallel betriebene Publisher benötigen
+getrennte MQTT-Basen und disjunkte absolute Mapping-Ziele. Der Betreiber muss die
+exklusive Zuständigkeit für alle dynamischen und Mapping-Ziele sicherstellen;
+ein Inventareintrag verleiht kein Eigentum an Topics anderer Anwendungen.
+
+Bei geändertem Broker, Port, MQTT-Basis, Fahrzeug oder Account wird ein vorhandenes
+Inventar abgelehnt und unverändert erhalten. Für die neue Konfiguration ist ein
+separater Zustandspfad zu wählen; der alte Bestand wird nicht automatisch gelöscht.
+Fehlende Inventare starten ohne Löschhistorie. Beschädigte Inventare stoppen vor
+Netzwerkzugriffen. Versionen 1 und 2 werden beim nächsten Speichern übernommen,
+aber ihre ungebundenen Topics bleiben unter `unassigned_topics` und begründen
+keinen Löschauftrag. Entfernte Katalogendpunkte werden ohne erfolgreiche Antwort
+nicht bereinigt. Containerstatus, Credential-Status und Endpunkt-`log`-Unterbäume
+sind für Telemetrie und deren Bereinigung gesperrt.
+
+Alte GraphQL-Topics gehören ebenfalls nicht automatisch zum neuen Inventar.
+Zur manuellen Bereinigung zunächst den alten Publisher stoppen, mit einem
+MQTT-Client die konkreten retained Topics prüfen und ausschließlich eindeutig
+eigene, nicht mehr benötigte Topics einzeln mit leerer retained Payload und QoS 1
+löschen. Keine pauschale Löschung des Topic-Baums; Status- und fremde Topics erhalten.
+Die Container-Persistenzabnahme und der separate Testbroker-Nachweis stehen noch aus.
 
 Jeder katalogisierte Endpunkt veröffentlicht außerdem `<Endpunktwurzel>/log/state`
 und `<Endpunktwurzel>/log/timestamp` retained mit bestätigtem QoS 1. `state` enthält
@@ -95,14 +128,14 @@ Regel gilt für neue Metadaten. Nur die validierte fachliche Battery-Antwort wir
 
 Der dynamische Baum liegt vollständig unter `telemetry/battery`. Auch ein
 JSON-Schlüssel `container` bleibt dort und erzeugt keinen Betriebsstatus unter
-`<MQTT_BASE_TOPIC>/container`. Der Schutz dieses separaten Betriebsbereichs vor
-Mapping-Zielen ist eine eigene offene Migrationsaufgabe.
+`<MQTT_BASE_TOPIC>/container`. Dieser separate Betriebsbereich ist einschließlich aller Unterpfade für
+relative und absolute Mapping-Ziele gesperrt.
 
 Mapping-Quellpfade beginnen am ursprünglichen JSON, beispielsweise
 `data.batteryChargeLevelPercentage`, ohne MQTT-Basis oder `telemetry.battery`.
 Zusätzliche Mapping-Ziele ändern weder diese Wurzel noch den dynamischen Baum.
-Die Regeln zur Behandlung ungültiger oder veralteter Daten und zur späteren
-Bereinigung retained gespeicherter Topics werden in separaten Schritten ergänzt.
+Die Bereinigung folgt dem oben beschriebenen Inventar. Der Vergleich von
+Quellzeiten über mehrere Polling-Zyklen bleibt offen.
 
 ## Data-Portal-Mapping: JSON-Pfad zu zusätzlichem MQTT-Topic
 
@@ -164,9 +197,9 @@ an die eigene Installation anzupassen.
 
 Ohne Datei am konfigurierten Mapping-Pfad werden ausschließlich die dynamischen
 Telemetrie-Topics ausgegeben. Die `.csv_sample`-Datei aktiviert keine Zuordnung.
-Das Entfernen der aktiven Datei beendet zusätzliche Veröffentlichungen, löscht
-aber keine bereits beim Broker gespeicherten retained Werte; die automatische
-Bereinigung wird in einem späteren Migrationsschritt umgesetzt.
+Das Entfernen der aktiven Datei beendet zusätzliche Veröffentlichungen. Beim
+nächsten erfolgreichen Battery-Abruf werden zuvor eindeutig verwaltete Mapping-Ziele
+über das gebundene Inventar bereinigt; unzugeordnete Altbestände bleiben erhalten.
 
 `source_path` bezeichnet einen Pfad im ursprünglichen JSON in Punktnotation,
 kein MQTT-Topic. Beispielsweise ordnet diese CSV-Zeile den Wert `77` aus

@@ -157,7 +157,7 @@ def test_inventory_contains_dynamic_and_mapping_topics_only(run_setup, tmp_path)
     )
     assert main() == 0
     inventory = json.loads((tmp_path / "state.json").read_text())
-    assert inventory["version"] == 2
+    assert inventory["version"] == 3
     assert inventory["unassigned_topics"] == []
     assert inventory["endpoints"]["/v1/vehicles/{vin}/telemetry/battery"] == sorted(
         call.args[0] for call in client.publish.call_args_list if "/log/" not in call.args[0]
@@ -165,7 +165,7 @@ def test_inventory_contains_dynamic_and_mapping_topics_only(run_setup, tmp_path)
     assert sum(len(topics) for topics in inventory["endpoints"].values()) == 5
 
 
-# Fehlende MQTT-Bestätigungen lassen das bisherige Topic-Inventar unverändert.
+# Fehlende Bestätigungen erhalten Altbestand und alle möglicherweise zugestellten Topics.
 def test_partial_publication_preserves_previous_inventory(run_setup, tmp_path) -> None:
     _, info, _, _ = run_setup
     state = tmp_path / "state.json"
@@ -173,16 +173,18 @@ def test_partial_publication_preserves_previous_inventory(run_setup, tmp_path) -
     state.write_text(previous)
     info.is_published.side_effect = [True] * 31 + [False]
     assert main() == 1
-    assert state.read_text() == previous
+    saved = json.loads(state.read_text())
+    assert saved["unassigned_topics"] == ["old/topic"]
+    assert saved["endpoints"] == {}
+    assert saved["pending"]["/v1/vehicles/{vin}/telemetry/battery"]
 
 
-# Ein Schreibfehler am Inventar beendet den Lauf mit Fehler und schließt MQTT.
+# Ein nicht beschreibbarer Inventarpfad verhindert bereits den Netzwerkstart.
 def test_inventory_write_failure_fails_run_and_disconnects(run_setup, monkeypatch, tmp_path):
     client, _, _, _ = run_setup
     monkeypatch.setenv("MQTT_TOPIC_STATE_FILE", str(tmp_path / "missing" / "state.json"))
     assert main() == 1
-    client.disconnect.assert_called_once()
-    client.loop_stop.assert_called_once()
+    client.connect.assert_not_called()
 
 
 # Ungültiges OpenAPI-JSON verhindert sämtliche API- und MQTT-Verbindungen.
@@ -369,18 +371,21 @@ def test_mapping_collision_with_other_endpoint_stops_before_publish(
 def test_endpoint_failure_preserves_history_during_partial_success(
     run_setup, requests_mock, tmp_path,
 ):
-    from polestar_mqtt.topic_inventory import load_topic_inventory, save_topic_inventory
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+    from polestar_mqtt.config import DataPortalConfig
 
     endpoint = "/v1/vehicles/{vin}/telemetry/exterior"
     state = tmp_path / "state.json"
     previous = ["polestar2-test/telemetry/exterior/data/old"]
-    save_topic_inventory(state, {endpoint: previous})
+    with ManagedTopicInventory(DataPortalConfig.from_environment()) as inventory:
+        inventory.endpoints = {endpoint: previous}
+        inventory.save()
     requests_mock.get(
         DEFAULT_POLESTAR_API_BASE_URL + endpoint.replace("{vin}", "LPSVS000000000000"),
         status_code=404, json={"error": {"code": "TEMPORARY", "message": "Try later"}},
     )
     assert main() == 0
-    endpoints, _ = load_topic_inventory(state)
+    endpoints = json.loads(state.read_text())["endpoints"]
     assert endpoints[endpoint] == previous
     assert "/v1/vehicles/{vin}/telemetry/battery" in endpoints
 
@@ -389,20 +394,23 @@ def test_endpoint_failure_preserves_history_during_partial_success(
 def test_later_publish_failure_preserves_confirmed_endpoint_update(
     run_setup, requests_mock, tmp_path,
 ):
-    from polestar_mqtt.topic_inventory import load_topic_inventory, save_topic_inventory
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+    from polestar_mqtt.config import DataPortalConfig
 
     _, info, _, _ = run_setup
     early = "/v1/vehicles/{vin}/charging/amp-limit"
     battery = "/v1/vehicles/{vin}/telemetry/battery"
     state = tmp_path / "state.json"
-    save_topic_inventory(state, {battery: ["old/battery"], early: ["old/charging"]})
+    with ManagedTopicInventory(DataPortalConfig.from_environment()) as inventory:
+        inventory.endpoints = {battery: ["old/battery"], early: ["old/charging"]}
+        inventory.save()
     requests_mock.get(
         DEFAULT_POLESTAR_API_BASE_URL + early.replace("{vin}", "LPSVS000000000000"),
         json={"data": {"value": 16}},
     )
-    info.is_published.side_effect = [True] * 31 + [False]
+    info.is_published.side_effect = [True] * 32 + [False]
     assert main() == 1
-    endpoints, _ = load_topic_inventory(state)
+    endpoints = json.loads(state.read_text())["endpoints"]
     assert endpoints[battery] == ["old/battery"]
     assert endpoints[early] == ["polestar2-test/charging/amp-limit/data/value"]
 
@@ -506,7 +514,7 @@ def test_dynamic_data_cannot_overwrite_endpoint_logs(run_setup, requests_mock):
     _, _, factory, _ = run_setup
     requests_mock.get(
         DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior",
-        json={"log": {"state": "injected"}},
+        json={"data": {}, "log": {"state": "injected"}},
     )
     assert main() == 1
     factory.assert_not_called()
@@ -542,3 +550,159 @@ def test_log_ack_failure_fails_before_telemetry(run_setup, tmp_path):
     assert main() == 1
     assert all("/log/" in call.args[0] for call in client.publish.call_args_list)
     assert not (tmp_path / "state.json").exists()
+
+
+# Entfallene Felder und Mapping-Ziele werden gelöscht; null bleibt ein Nutzwert.
+def test_cleanup_removes_only_obsolete_topics(run_setup, requests_mock, tmp_path):
+    client, _, _, battery_url = run_setup
+    mapping = tmp_path / "mapping.csv"
+    mapping.write_text("source_path,target_topic\ndata.optional,absolute:dedicated/optional\n")
+    original = {
+        "data": {"vin": "LPSVS000000000000", "batteryChargeLevelPercentage": 50,
+                 "optional": 12, "nullable": 7},
+        "meta": {"vin": "LPSVS000000000000"},
+    }
+    requests_mock.get(battery_url, json=original)
+    assert main() == 0
+    del original["data"]["optional"]
+    original["data"]["nullable"] = None
+    mapping.write_text("source_path,target_topic\n")
+    requests_mock.get(battery_url, json=original)
+    client.reset_mock()
+    assert main() == 0
+    deletions = [call.args[0] for call in client.publish.call_args_list if call.args[1] == ""]
+    assert set(deletions) == {
+        "dedicated/optional", "polestar2-test/telemetry/battery/data/optional",
+    }
+    client.publish.assert_any_call(
+        "polestar2-test/telemetry/battery/data/nullable", "null", qos=1, retain=True,
+    )
+    assert all("/log/" not in topic and "/container/" not in topic for topic in deletions)
+    assert json.loads((tmp_path / "state.json").read_text())["pending"] == {}
+
+
+@pytest.mark.parametrize("failure_phase", ["publish", "delete", "commit"])
+# Abbrüche verlieren weder alte noch möglicherweise neu zugestellte Topics.
+def test_interrupted_transaction_recovers_all_possible_topics(
+    run_setup, requests_mock, tmp_path, monkeypatch, failure_phase,
+):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory, TopicInventoryError
+
+    client, info, _, _ = run_setup
+    url = DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior"
+    root = "polestar2-test/telemetry/exterior/data/"
+    requests_mock.get(url, json={"data": {"old": 1}})
+    assert main() == 0
+    requests_mock.get(url, json={"data": {"new": 2}})
+    original_finish = ManagedTopicInventory.finish
+
+    def fail_finish(self, endpoint, desired):
+        if endpoint.endswith("/exterior"):
+            raise TopicInventoryError("simulated crash before commit")
+        return original_finish(self, endpoint, desired)
+
+    def publish(topic, payload, **kwargs):
+        failed = (failure_phase == "publish" and topic == root + "new") or (
+            failure_phase == "delete" and topic == root + "old" and payload == ""
+        )
+        return Mock(rc=0, is_published=Mock(return_value=not failed))
+
+    client.publish.side_effect = publish
+    if failure_phase == "commit":
+        monkeypatch.setattr(ManagedTopicInventory, "finish", fail_finish)
+    assert main() == 1
+    state = json.loads((tmp_path / "state.json").read_text())
+    endpoint = "/v1/vehicles/{vin}/telemetry/exterior"
+    assert state["pending"][endpoint] == [root + "new", root + "old"]
+    assert state["intended"][endpoint] == [root + "new"]
+    assert state["endpoints"][endpoint] == [root + "old"]
+
+    monkeypatch.setattr(ManagedTopicInventory, "finish", original_finish)
+    requests_mock.get(url, json={"data": {"latest": 3}})
+    client.reset_mock()
+    client.publish.side_effect = None
+    client.publish.return_value = info
+    assert main() == 0
+    for topic in (root + "old", root + "new"):
+        client.publish.assert_any_call(topic, "", qos=1, retain=True)
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert state["pending"] == {}
+    assert state["endpoints"][endpoint] == [root + "latest"]
+
+
+@pytest.mark.parametrize("target", [
+    "container", "container/connected", "absolute:polestar2-test/container/custom/deep",
+])
+# Der gesamte Container-Namespace ist auch für absolute Mappings gesperrt.
+def test_container_mapping_is_rejected_before_publish(run_setup, tmp_path, target):
+    _, _, factory, _ = run_setup
+    (tmp_path / "mapping.csv").write_text("source_path,target_topic\nmissing," + target + "\n")
+    assert main() == 1
+    factory.assert_not_called()
+
+
+@pytest.mark.parametrize("payload", [{}, {"data": None}, {"data": {"vin": "wrong"}},
+                                     {"data": {"timestamp": "bad"}}])
+# Ungültige erfolgreiche HTTP-Antworten dürfen den vorherigen Bestand nicht löschen.
+def test_invalid_response_keeps_retained_inventory(run_setup, requests_mock, tmp_path, payload):
+    client, _, _, _ = run_setup
+    url = DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior"
+    requests_mock.get(url, json={"data": {"old": 1}})
+    assert main() == 0
+    before = json.loads((tmp_path / "state.json").read_text())["endpoints"]
+    requests_mock.get(url, json=payload)
+    client.reset_mock()
+    assert main() == 0
+    assert not any(call.args[1] == "" for call in client.publish.call_args_list)
+    assert json.loads((tmp_path / "state.json").read_text())["endpoints"] == before
+
+
+# Eine gültige leere Antwort bereinigt nur ihren eigenen Endpunkt.
+def test_empty_endpoint_cleans_previous_topics(run_setup, requests_mock):
+    client, _, _, _ = run_setup
+    url = DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior"
+    requests_mock.get(url, json={"data": {"old": 1}})
+    assert main() == 0
+    requests_mock.get(url, json={"data": {}})
+    client.reset_mock()
+    assert main() == 0
+    deletions = [call.args[0] for call in client.publish.call_args_list if call.args[1] == ""]
+    assert deletions == ["polestar2-test/telemetry/exterior/data/old"]
+
+
+# Ohne dauerhaft gespeicherten Vorgang beginnt kein Telemetrie- oder Lösch-Publish.
+def test_journal_write_failure_prevents_telemetry(run_setup, monkeypatch):
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory, TopicInventoryError
+
+    client, _, _, _ = run_setup
+
+    def fail_save(self):
+        raise TopicInventoryError("simulated write failure")
+
+    monkeypatch.setattr(ManagedTopicInventory, "save", fail_save)
+    assert main() == 1
+    assert client.publish.call_count == 30
+    assert all("/log/" in call.args[0] for call in client.publish.call_args_list)
+
+
+# Nach einem Abbruch bleibt der Vorgang bei API-Fehlern unangetastet.
+def test_failed_endpoint_does_not_resume_pending_deletions(run_setup, requests_mock, tmp_path):
+    from polestar_mqtt.config import DataPortalConfig
+    from polestar_mqtt.topic_inventory import ManagedTopicInventory
+
+    client, _, _, _ = run_setup
+    endpoint = "/v1/vehicles/{vin}/telemetry/exterior"
+    with ManagedTopicInventory(DataPortalConfig.from_environment()) as inventory:
+        inventory.endpoints[endpoint] = ["polestar2-test/telemetry/exterior/data/old"]
+        inventory.begin(endpoint, ["polestar2-test/telemetry/exterior/data/new"])
+    before = json.loads((tmp_path / "state.json").read_text())
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + endpoint.replace("{vin}", "LPSVS000000000000"),
+        status_code=404, json={"error": {"code": "DATA_NOT_AVAILABLE", "message": "No data"}},
+    )
+    assert main() == 0
+    after = json.loads((tmp_path / "state.json").read_text())
+    assert after["pending"] == before["pending"]
+    assert after["intended"] == before["intended"]
+    assert after["endpoints"][endpoint] == before["endpoints"][endpoint]
+    assert not any(call.args[1] == "" for call in client.publish.call_args_list)
