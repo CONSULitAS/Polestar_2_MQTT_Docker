@@ -19,19 +19,25 @@ Dieser Ordner enthält die technische Projektdokumentation ergänzend zur `READM
 
 ## Data-Portal-Ausgabe: dynamischer Topic-Baum
 
-Der lokale Einmallauf speichert nach Bestätigung sämtlicher Telemetrie-Publishes
+Der lokale Einmallauf speichert je Endpunkt nach Bestätigung seiner Telemetrie-Publishes
 die tatsächlich publizierten dynamischen und Mapping-Topic-Namen in
 `local-files/mqtt_topic_state.json`. `MQTT_TOPIC_STATE_FILE` kann den Pfad ändern;
 beim direkten Modulstart ist der Default `/local-files/mqtt_topic_state.json`.
 Das übergeordnete Verzeichnis muss existieren und schreibbar sein. Die lokale
 Standarddatei ist von Git ausgeschlossen und enthält ausschließlich eine
-Formatversion und sortierte eindeutige Topic-Namen, keine Payloads oder Credentials.
+Formatversion, Endpunkt-Pfadtemplates und sortierte eindeutige Topic-Namen,
+keine Payloads oder Credentials. Formatversion 2 ordnet Topics ihrem Endpunkt zu.
+Alte Listen aus Version 1 bleiben als `unassigned_topics` ohne geratene Zuordnung
+erhalten. Fehlende Dateien starten leer; beschädigte Dateien stoppen den Lauf
+vor Netzwerkzugriffen und werden nicht überschrieben.
 
-Bei MQTT-Fehlern wird der vorherige Dateistand nicht ersetzt. Ein Schreibfehler
+Bei API- oder MQTT-Fehlern bleibt der bisherige Bestand des betroffenen Endpunkts
+erhalten; bereits bestätigte andere Endpunkte werden separat gespeichert.
+Unveränderte Topic-Mengen benötigen keinen erneuten Schreibzugriff. Ein Schreibfehler
 führt zu einem fehlgeschlagenen Einmallauf, auch wenn MQTT bereits bestätigt hat.
 Das Speichern erfolgt über eine temporäre Datei mit anschließendem Ersetzen;
 es ist noch kein vollständiges Wiederanlaufprotokoll. Das Inventar wird derzeit
-nicht für Vergleiche oder Löschungen verwendet. Dauerhafte Container-Einbindung,
+noch nicht zur Bereinigung verwaister retained Topics verwendet. Dauerhafte Container-Einbindung,
 Broker-/Instanzzuordnung und Wiederaufnahme nach Prozessabstürzen folgen separat.
 
 Für die Battery-Ausgabe ist die Wurzel

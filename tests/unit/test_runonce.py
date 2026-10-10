@@ -157,11 +157,12 @@ def test_inventory_contains_dynamic_and_mapping_topics_only(run_setup, tmp_path)
     )
     assert main() == 0
     inventory = json.loads((tmp_path / "state.json").read_text())
-    assert inventory == {
-        "version": 1,
-        "topics": sorted(call.args[0] for call in client.publish.call_args_list),
-    }
-    assert len(inventory["topics"]) == 5
+    assert inventory["version"] == 2
+    assert inventory["unassigned_topics"] == []
+    assert inventory["endpoints"]["/v1/vehicles/{vin}/telemetry/battery"] == sorted(
+        call.args[0] for call in client.publish.call_args_list
+    )
+    assert sum(len(topics) for topics in inventory["endpoints"].values()) == 5
 
 
 # Fehlende MQTT-Bestätigungen lassen das bisherige Topic-Inventar unverändert.
@@ -329,7 +330,7 @@ def test_generic_endpoint_keeps_data_meta_and_arrays(run_setup, requests_mock, t
     client.publish.assert_any_call(root + "/data/newField/1", "7", qos=1, retain=True)
     client.publish.assert_any_call(root + "/meta/domain", "exterior", qos=1, retain=True)
     inventory = json.loads((tmp_path / "state.json").read_text())
-    assert len(inventory["topics"]) == 7
+    assert sum(len(topics) for topics in inventory["endpoints"].values()) == 7
 
 
 # Ein Battery-Ausfall blockiert die Veröffentlichung anderer erfolgreicher Antworten nicht.
@@ -362,3 +363,56 @@ def test_mapping_collision_with_other_endpoint_stops_before_publish(
     )
     assert main() == 1
     factory.assert_not_called()
+
+
+# Ein temporärer Endpunktfehler erhält seine früheren Topics trotz erfolgreicher Battery-Ausgabe.
+def test_endpoint_failure_preserves_history_during_partial_success(
+    run_setup, requests_mock, tmp_path,
+):
+    from polestar_mqtt.topic_inventory import load_topic_inventory, save_topic_inventory
+
+    endpoint = "/v1/vehicles/{vin}/telemetry/exterior"
+    state = tmp_path / "state.json"
+    previous = ["polestar2-test/telemetry/exterior/data/old"]
+    save_topic_inventory(state, {endpoint: previous})
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + endpoint.replace("{vin}", "LPSVS000000000000"),
+        status_code=404, json={"error": {"code": "TEMPORARY", "message": "Try later"}},
+    )
+    assert main() == 0
+    endpoints, _ = load_topic_inventory(state)
+    assert endpoints[endpoint] == previous
+    assert "/v1/vehicles/{vin}/telemetry/battery" in endpoints
+
+
+# Bereits bestätigte Endpunkte bleiben gespeichert, wenn ein späterer Publish scheitert.
+def test_later_publish_failure_preserves_confirmed_endpoint_update(
+    run_setup, requests_mock, tmp_path,
+):
+    from polestar_mqtt.topic_inventory import load_topic_inventory, save_topic_inventory
+
+    _, info, _, _ = run_setup
+    early = "/v1/vehicles/{vin}/charging/amp-limit"
+    battery = "/v1/vehicles/{vin}/telemetry/battery"
+    state = tmp_path / "state.json"
+    save_topic_inventory(state, {battery: ["old/battery"], early: ["old/charging"]})
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + early.replace("{vin}", "LPSVS000000000000"),
+        json={"data": {"value": 16}},
+    )
+    info.is_published.side_effect = [True, False]
+    assert main() == 1
+    endpoints, _ = load_topic_inventory(state)
+    assert endpoints[battery] == ["old/battery"]
+    assert endpoints[early] == ["polestar2-test/charging/amp-limit/data/value"]
+
+
+# Ein beschädigtes Inventar wird vor Netzwerkzugriffen erkannt und nicht überschrieben.
+def test_corrupt_inventory_stops_before_network(run_setup, tmp_path, requests_mock):
+    _, _, factory, _ = run_setup
+    state = tmp_path / "state.json"
+    state.write_text("broken")
+    assert main() == 1
+    assert requests_mock.call_count == 0
+    factory.assert_not_called()
+    assert state.read_text() == "broken"

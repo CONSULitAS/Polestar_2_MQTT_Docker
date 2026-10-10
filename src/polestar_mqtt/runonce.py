@@ -20,7 +20,7 @@ from polestar_mqtt.publisher import (
     validate_mapping_targets, validate_publish_topic,
 )
 
-from polestar_mqtt.topic_inventory import save_topic_inventory
+from polestar_mqtt.topic_inventory import load_topic_inventory, save_topic_inventory
 
 
 MQTT_TIMEOUT_SECONDS = 30.0
@@ -56,6 +56,7 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
     catalog = build_endpoint_catalog(load_openapi_document(config.openapi_file))
     scope = aggregate_scopes(catalog)
     mapping = load_topic_mapping(config.mqtt_topic_mapping_file, config.mqtt_base_topic)
+    inventory, unassigned_topics = load_topic_inventory(config.mqtt_topic_state_file)
     battery_path = "/v1/vehicles/{vin}/telemetry/battery"
 
     with DataPortalHttpClient(config.api_base_url) as http:
@@ -87,7 +88,7 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
                 raise TopicMappingError("Dynamic endpoint topics overlap")
             dynamic_topics.add(topic)
         endpoint_mapping = mapping if endpoint.path_template == battery_path else {}
-        publications.append((root, payload, endpoint_mapping))
+        publications.append((endpoint.path_template, root, payload, endpoint_mapping))
     validate_mapping_targets(mapping, dynamic_topics)
     if not dynamic_topics:
         raise DataPortalResponseError("No publishable endpoint data is available")
@@ -118,9 +119,15 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
             raise MqttRunError("MQTT connection rejected")
         publisher = ConfirmedPublisher(client)
         topics = []
-        for root, payload, endpoint_mapping in publications:
-            topics.extend(publish_json_topics(publisher, root, payload, mapping=endpoint_mapping))
-        save_topic_inventory(config.mqtt_topic_state_file, topics)
+        for endpoint_path, root, payload, endpoint_mapping in publications:
+            confirmed = publish_json_topics(publisher, root, payload, mapping=endpoint_mapping)
+            topics.extend(confirmed)
+            if sorted(set(confirmed)) == inventory.get(endpoint_path, []):
+                continue
+            inventory[endpoint_path] = confirmed
+            save_topic_inventory(
+                config.mqtt_topic_state_file, inventory, unassigned_topics=unassigned_topics,
+            )
         return len(topics), len(failures)
     finally:
         try:
