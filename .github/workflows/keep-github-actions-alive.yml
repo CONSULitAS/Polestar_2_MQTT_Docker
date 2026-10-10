@@ -1,5 +1,7 @@
 ---
 name: Keep workflows alive
+permissions:
+  pull-requests: write  contents: read
 
 # yamllint disable-line rule:truthy
 on:
