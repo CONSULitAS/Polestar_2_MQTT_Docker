@@ -176,3 +176,22 @@ def test_token_repr_does_not_contain_access_token(
 
     assert "access-token-value" not in repr(token)
 
+
+def test_scope_snapshot_survives_cache_expiry_and_forced_renewal(requests_mock):
+    requests_mock.post(TOKEN_URL, json={
+        "accessToken": "fixture-token", "expiresIn": 3600, "tokenType": "Bearer",
+    })
+    clock = FakeClock()
+    scope = "pdp-charging/targetSoc pdp-telemetry/battery"
+    provider = TokenProvider(
+        DataPortalHttpClient(BASE_URL), "client-id", "client-secret",
+        scope=scope, monotonic=clock,
+    )
+    first = provider.get_token()
+    assert provider.get_token() is first
+    assert requests_mock.call_count == 1
+    clock.value = first.expires_at_monotonic
+    provider.get_token()
+    provider.get_token(force_refresh=True)
+    assert requests_mock.call_count == 3
+    assert all(request.json()["scope"] == scope for request in requests_mock.request_history)

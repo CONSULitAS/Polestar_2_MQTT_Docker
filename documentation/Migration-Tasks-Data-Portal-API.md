@@ -259,15 +259,35 @@ Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
     Berechtigungsdialog abgelehnt. Ersatzweise Ruff und vollständiges pytest mit
     vorhandener `.venv` ohne Netzwerk ausgeführt: 322 Tests erfolgreich, Exit-Code 0.
     Die anschließende Abnahme über die vorgesehenen Skripte ist oben dokumentiert.
-- [ ] Je Operation Pfadtemplate, fachlichen Topic-Wurzelpfad, `x-required-scopes`, Beschreibung und optionale `x-supported-models` erfassen; `{vin}` ausschließlich über die vorhandene VIN-Validierung und sichere Pfadkodierung einsetzen.
-- [ ] Alle für die aktivierten Endpunkte benötigten Scopes deduplizieren, deterministisch sortieren und als leerzeichenseparierten Scope-String beim Token-Endpunkt anfordern.
-- [ ] Eine optionale Endpunktauswahl beziehungsweise Ausschlussliste vorsehen, insbesondere damit sensible Daten wie `telemetry/location` bewusst deaktiviert werden können; unbekannte Einträge beim Start ablehnen.
+- [x] Je Operation Pfadtemplate, fachlichen Topic-Wurzelpfad, `x-required-scopes`, Beschreibung und optionale `x-supported-models` erfassen; `{vin}` ausschließlich über die vorhandene VIN-Validierung und sichere Pfadkodierung einsetzen.
+  - 2026-10-10: Unveränderliche `Endpoint`-Einträge mit validierten Metadaten
+    implementiert. Beschreibung fällt auf `summary` zurück; Modellangaben
+    bleiben Hinweise ohne Filterwirkung. `request_path()` verwendet die
+    bestehende VIN-Regel, Normalisierung und URL-Kodierung; ungültige VINs und
+    Templates werden ohne Ausgabe vertraulicher Werte abgelehnt.
+    `./run_tests.sh`: Ruff, 349 Tests und Legacy-Einmallauf erfolgreich,
+    Exit-Code 0. Anschließend `./run_local.sh runonce-DataPortalAPI`: API-Abfrage
+    und MQTT-Veröffentlichung bestätigt, Exit-Code 0. Scope-Aggregation und
+    generische Requests bleiben separate Schritte; kein Container-Build.
+- [x] Alle für sämtliche katalogisierten Endpunkte benötigten Scopes deduplizieren, deterministisch sortieren und als leerzeichenseparierten Scope-String beim Token-Endpunkt anfordern.
+  - 2026-10-10: Scope-Satz des vollständigen Katalogs wird einmal beim Start
+    gebildet und dem TokenProvider übergeben. Automatische Erneuerung und
+    Wiederholung nach `401` verwenden denselben String. Auth-only-/SoC-Diagnosen
+    behalten ihren Battery-Scope. `./run_tests.sh`: Ruff, 353 Tests und
+    Legacy-Einmallauf erfolgreich, Exit-Code 0. Lokaler Data-Portal-Einmallauf
+    über `./run_local.sh runonce-DataPortalAPI` mit vollständigem Scope-Satz:
+    API erfolgreich, MQTT bestätigt, Exit-Code 0. Kein Container-Build.
+
+**Vorgabe vom 2026-10-10:** Immer alle erlaubten GET-Endpunkte des Katalogs
+berücksichtigen, einschließlich Location. Die zuvor geplante optionale
+Endpunktauswahl/Ausschlussliste entfällt; `POLESTAR_API_ENDPOINTS` wird nicht
+eingeführt. Modellhinweise bewirken keinen automatischen Ausschluss.
 - [ ] Einen generischen GET-Abruf implementieren und den Endpoint-Katalog pro Polling-Zyklus sequenziell abarbeiten, ohne pro dokumentiertem Endpunkt eine eigene Client-Methode anzulegen.
 - [ ] Erfolgreiche Antworten je Endpunkt unter einer aus dem Pfad abgeleiteten Wurzel publizierbar machen, beispielsweise `/telemetry/battery` unter `<base>/telemetry/battery`; `data` und `meta` bleiben Bestandteil des dynamischen Baums.
 - [ ] Fehler je Endpunkt isolieren: Ein nicht unterstützter oder vorübergehend fehlerhafter Endpunkt darf andere Endpunkte desselben Zyklus nicht blockieren. Retained-Bereinigung nur für einen fachlich erfolgreich und gültig verarbeiteten Endpunkt ausführen.
 - [ ] `404 DATA_NOT_AVAILABLE`, modellabhängig nicht unterstützte Endpunkte und temporäre Transport-/Serverfehler getrennt behandeln; `x-supported-models` nur als Hinweis verwenden, solange das Fahrzeugmodell nicht verlässlich bekannt ist.
 - [ ] Battery-SoC als besondere fachliche Ableitung für Validierung, openWB und Kompatibilitäts-Mapping beibehalten, obwohl Transport und dynamische MQTT-Ausgabe generisch werden.
-- [ ] Unit-Tests mit veränderten synthetischen OpenAPI-Dateien ergänzen: neuer kompatibler GET-Endpunkt ohne Codeänderung, ungültige beziehungsweise gefährliche Pfade, Scope-Aggregation, Endpoint-Auswahl und isolierte Teilfehler.
+- [ ] Unit-Tests mit veränderten synthetischen OpenAPI-Dateien ergänzen: neuer kompatibler GET-Endpunkt ohne Codeänderung, ungültige beziehungsweise gefährliche Pfade, Scope-Aggregation über den vollständigen Katalog und isolierte Teilfehler.
 - [ ] Einen lokalen und anschließend containerisierten Live-QS-Lauf über den generischen Katalog durchführen; aufgerufene Endpunktnamen und Ergebnisse dokumentieren, aber keine VIN, Position, Tokens oder vollständigen Fahrzeugdaten speichern.
 
 **Abnahme:** Ein kompatibler neuer lesender Fahrzeugendpunkt wird allein durch

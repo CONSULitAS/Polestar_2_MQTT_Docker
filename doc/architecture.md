@@ -21,7 +21,7 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
    API-Basis bleibt unabhängig von `servers` in der Datei maßgeblich. Änderungen
    der Datei werden erst nach einem Container-Neustart übernommen.
 4. OAuth2 Client Credentials fordern ein Token mit den aggregierten Scopes der
-   aktivierten Endpunkte an; `/v1/vehicles` validiert die konfigurierte VIN.
+   katalogisierten Endpunkte an; `/v1/vehicles` validiert die konfigurierte VIN.
 5. Der Client arbeitet den Endpoint-Katalog sequenziell ab. Fehler bleiben auf
    den jeweiligen Endpunkt begrenzt.
 6. Erfolgreiche JSON-Antworten werden unter einer vom API-Pfad abgeleiteten
@@ -38,6 +38,9 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 - ENV-gesteuerte MQTT-/OpenWB-Parameter via Docker Compose
 
 ## Grenzen der OpenAPI-Steuerung
+- Alle erlaubten GET-Endpunkte des Katalogs werden berücksichtigt, einschließlich
+  Location. Es gibt keine optionale Endpunktauswahl oder Ausschlussliste;
+  Modellhinweise deaktivieren keine Endpunkte.
 - `POLESTAR_API_BASE_URL` wird in Konfiguration und HTTP-Client als HTTPS-URL
   mit Host und gültigem optionalem Port geprüft. Eingebettete Zugangsdaten,
   Query, Fragment, Whitespace und Backslashes sind unzulässig; Fehlermeldungen
@@ -53,8 +56,23 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
   abgelehnt. Pfad-/Operationsreferenzen werden nicht aufgelöst und sind unzulässig.
   `/token`, `/v1/vehicles` und `x-`-Metadaten bleiben außerhalb des Katalogs;
   Schreiboperationen werden ausgeschlossen, unbekannte Pfade abgelehnt.
-  Der Katalog steuert noch keine Requests; Metadaten, Scopes und generische
-  Abrufschleife folgen in separaten M5B-Schritten.
+  Der Katalog liefert bereits die Scopes für den Token-Abruf. Die generische
+  Abrufschleife folgt im nächsten M5B-Schritt.
+- Katalogeinträge sind unveränderliche `Endpoint`-Objekte mit `path_template`,
+  `topic_root` (z. B. `/telemetry/battery`), `required_scopes`, `description`
+  und optionalen `supported_models`. Die Topic-Wurzel enthält weder MQTT-Basis
+  noch VIN. `x-required-scopes` muss eine nicht leere Liste gültiger einzelner
+  Scope-Zeichenfolgen sein. Beschreibungen nutzen
+  bei fehlender oder leerer `description` die `summary`, sonst einen leeren Text.
+  Fehlende Modellhinweise werden als `None` erfasst; vorhandene Listen dürfen
+  nur nicht leere Namen enthalten und dienen ausschließlich als Hinweis.
+  `request_path(vin)` normalisiert und prüft die VIN mit der bestehenden
+  VIN-Regel und setzt sie URL-kodiert in das erneut geprüfte Template ein.
+- `aggregate_scopes()` sammelt alle Scopes des vollständigen Katalogs,
+  dedupliziert und sortiert sie und verbindet sie mit Leerzeichen. Ein leerer
+  Scope-Satz wird abgelehnt. Der Data-Portal-Einmallauf übergibt den String an
+  den `TokenProvider`; dieser verwendet ihn auch bei Ablauf und nach `401`
+  unverändert. Die getrennten Auth-only-/SoC-Diagnosen behalten den Battery-Scope.
 - Die versionierte Spezifikation liegt unter `api/Polestar_DataPortalAPI.json`
   und wird beim Image-Build nach `/app/api/Polestar_DataPortalAPI.json` kopiert.
   `select_openapi_file()` in `openapi_catalog.py` wählt die über

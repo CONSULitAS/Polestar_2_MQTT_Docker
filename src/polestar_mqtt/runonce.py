@@ -9,7 +9,9 @@ from time import monotonic
 import paho.mqtt.client as mqtt
 
 from polestar_mqtt.config import ConfigurationError, DataPortalConfig
-from polestar_mqtt.openapi_catalog import build_endpoint_catalog, load_openapi_document
+from polestar_mqtt.openapi_catalog import (
+    aggregate_scopes, build_endpoint_catalog, load_openapi_document,
+)
 from polestar_mqtt.polestar_api import DataPortalClient, DataPortalHttpClient, TokenProvider
 from polestar_mqtt.publisher import load_topic_mapping, publish_json_topics, validate_publish_topic
 
@@ -46,13 +48,14 @@ class ConfirmedPublisher:
 def run_once(config: DataPortalConfig) -> int:
     """Fetch one valid Battery snapshot and publish to the configured broker."""
 
-    build_endpoint_catalog(load_openapi_document(config.openapi_file))
+    catalog = build_endpoint_catalog(load_openapi_document(config.openapi_file))
+    scope = aggregate_scopes(catalog)
     mapping = load_topic_mapping(config.mqtt_topic_mapping_file, config.mqtt_base_topic)
     root = f"{config.mqtt_base_topic.rstrip('/')}/telemetry/battery"
     validate_publish_topic(root)
 
     with DataPortalHttpClient(config.api_base_url) as http:
-        provider = TokenProvider(http, config.client_id, config.client_secret)
+        provider = TokenProvider(http, config.client_id, config.client_secret, scope=scope)
         api = DataPortalClient(http, provider, config.account_id)
         api.ensure_vehicle_authorized(config.vin)
         battery = api.get_battery(config.vin)

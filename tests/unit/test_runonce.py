@@ -216,3 +216,32 @@ def test_openapi_servers_never_replace_configured_api_base(
         request.url.startswith(DEFAULT_POLESTAR_API_BASE_URL + "/")
         for request in requests_mock.request_history
     )
+
+
+def test_runonce_requests_catalog_scopes_on_initial_token_and_401_retry(
+    run_setup, tmp_path, monkeypatch, requests_mock,
+):
+    _, _, _, battery_url = run_setup
+    document = runonce.load_openapi_document(tmp_path / "missing")
+    document["paths"]["/v1/vehicles/{vin}/telemetry/new-field"] = {
+        "get": {"responses": {"200": {}}, "x-required-scopes": [
+            "test/new", "pdp-telemetry/battery", "test/new",
+        ]},
+    }
+    local = tmp_path / "scopes.json"
+    local.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setenv("POLESTAR_OPENAPI_FILE", str(local))
+    requests_mock.get(battery_url, [
+        {"status_code": 401, "json": {}},
+        {"json": {"data": {
+            "vin": "LPSVS000000000000", "batteryChargeLevelPercentage": 50,
+        }, "meta": {"vin": "LPSVS000000000000"}}},
+    ])
+    assert main() == 0
+    expected = " ".join(sorted({
+        scope for item in document["paths"].values()
+        for scope in item.get("get", {}).get("x-required-scopes", [])
+    }))
+    token_requests = [r for r in requests_mock.request_history if r.method == "POST"]
+    assert len(token_requests) == 2
+    assert all(r.json()["scope"] == expected for r in token_requests)

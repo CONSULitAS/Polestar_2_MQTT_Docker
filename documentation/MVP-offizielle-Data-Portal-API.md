@@ -7,7 +7,7 @@ Der erste Rewrite-Schritt ersetzt die bisherige inoffizielle Polestar-ID-/GraphQ
 1. sich per OAuth2 Client Credentials authentifizieren,
 2. die Berechtigung für die konfigurierte VIN prüfen,
 3. die lesenden Fahrzeugendpunkte aus einer validierten OpenAPI-Spezifikation ermitteln,
-4. die aktivierten Telemetrie- und Charging-Endpunkte zyklisch generisch abrufen,
+4. alle katalogisierten Telemetrie- und Charging-Endpunkte zyklisch generisch abrufen,
 5. deren JSON-Antworten dynamisch über MQTT veröffentlichen und den validierten Batterie-SoC optional an openWB weiterreichen.
 
 Nicht Teil des MVP sind Schreiboperationen, eine automatische Migration aller
@@ -47,7 +47,7 @@ TokenProvider ------> POST /token mit aggregierten Scopes
      |
      v
 PolestarDataPortalClient ----> GET /v1/vehicles
-     |                         GET-Schleife über aktivierte Fahrzeugendpunkte
+     |                         GET-Schleife über alle katalogisierten Fahrzeugendpunkte
      v
 Dynamischer JSON-Publisher ----> MQTT
      |
@@ -77,7 +77,6 @@ Neue Variablen:
 | `POLESTAR_VIN` | ja | abzurufendes Fahrzeug |
 | `POLESTAR_API_BASE_URL` | nein | überschreibbare Basis-URL, standardmäßig die dokumentierte M2M-URL |
 | `POLESTAR_OPENAPI_FILE` | nein | optionale lokale OpenAPI-Datei; standardmäßig `/local-files/Polestar_DataPortalAPI.json`, mit gebündeltem Fallback unter `api/`; sie wird einmal beim Containerstart geladen |
-| `POLESTAR_API_ENDPOINTS` | nein | optionale Auswahl oder Ausschlussliste für katalogisierte GET-Endpunkte; sensible Endpunkte wie Location können damit deaktiviert werden |
 | `POLESTAR_CYCLE` | nein | Polling-Intervall, zunächst weiterhin 270 Sekunden |
 | `POLESTAR_DELEGATED_ACCOUNT_ID` | nein/später | optionaler Header für Third-Party-Credentials; nicht MVP |
 
@@ -115,7 +114,7 @@ Ist das Secret bereits abgelaufen, wird der Zustand deutlich publiziert und jede
 
 1. Konfiguration validieren; bei fehlenden Pflichtwerten mit einer eindeutigen Meldung abbrechen.
 2. Lokale OpenAPI-Datei verwenden, sofern vorhanden, andernfalls den gebündelten Fallback laden. Die Datei wird einmal beim Containerstart validiert und katalogisiert; eine Änderung wird erst nach einem Container-Neustart wirksam. Nur validierte GET-Operationen innerhalb der erlaubten Fahrzeugpfade katalogisieren.
-3. Scopes aller aktivierten Operationen deduplizieren und deterministisch als leerzeichenseparierten String bilden.
+3. Scopes aller katalogisierten Operationen deduplizieren und deterministisch als leerzeichenseparierten String bilden.
 4. `POST /token` als JSON oder Form-Body senden:
 
    ```json
@@ -170,9 +169,9 @@ Battery behält zusätzliche Fachlogik:
 - Keine Tokens, Secrets oder vollständigen Response-Header loggen. Fehlerantworten nur redigiert protokollieren.
 
 Das bestehende Intervall von 270 Sekunden erzeugt rund 320 Zyklen pro Tag. Bei
-15 aktivierten fachlichen GET-Endpunkten sind das rund 4.800 Aufrufe zuzüglich
+15 katalogisierten fachlichen GET-Endpunkten sind das rund 4.800 Aufrufe zuzüglich
 Token- und Fahrzeuglistenabrufen und damit weiterhin weniger als 10.000 Aufrufe
-pro Client und Tag. Die tatsächliche Zahl aktivierter Endpunkte muss in die
+pro Client und Tag. Die tatsächliche Zahl katalogisierter Endpunkte muss in die
 Rate-Limit-Bewertung einfließen; ein Intervall unter 10 Sekunden bleibt unzulässig.
 
 ## Dynamische MQTT-Ausgabe und optionale Kompatibilität
@@ -274,7 +273,7 @@ Der MVP ist abgenommen, wenn:
 - der Container ausschließlich mit offiziellen API-Credentials startet,
 - ein fehlendes oder ungültiges Secret-Ablaufdatum den Start mit einer verständlichen Konfigurationsmeldung verhindert,
 - die Anwendung bei 30, 14, 7, 3, 1 und 0 verbleibenden Tagen eine entprellte Warnung erzeugt und den Credential-Status retained über MQTT bereitstellt,
-- ein Token mit genau den deduplizierten Scopes der aktivierten katalogisierten Endpunkte bezogen und vor Ablauf erneuert wird,
+- ein Token mit genau den deduplizierten Scopes aller katalogisierten Endpunkte bezogen und vor Ablauf erneuert wird,
 - eine nicht autorisierte VIN bereits beim Start verständlich gemeldet wird,
 - ein synthetisch ergänzter kompatibler GET-Endpunkt ohne Codeänderung katalogisiert, abgerufen und dynamisch publiziert wird,
 - ungültige Methoden, Pfade oder Serverangaben aus einer ausgetauschten Spezifikation nicht ungeprüft ausgeführt werden,
@@ -290,10 +289,10 @@ Der MVP ist abgenommen, wenn:
 
 Für den MVP empfohlen entschieden:
 
-- Scopes werden ausschließlich aus den aktivierten, validierten OpenAPI-GET-Operationen abgeleitet und deterministisch gebündelt
+- Scopes werden ausschließlich aus allen validierten, katalogisierten OpenAPI-GET-Operationen abgeleitet und deterministisch gebündelt
 - die konfigurierte `POLESTAR_API_BASE_URL` bleibt maßgeblich; `servers` aus einer lokalen Spezifikation ändert das Request-Ziel nicht automatisch
 - kompatible lesende Fahrzeugendpunkte werden generisch verarbeitet; Schreiboperationen bleiben ausgeschlossen
-- sensible Endpunkte wie Location können über die Endpunktauswahl deaktiviert werden
+- alle erlaubten GET-Endpunkte des Katalogs werden berücksichtigt, einschließlich Location; keine optionale Auswahl oder Ausschlussliste (Nutzervorgabe vom 2026-10-10)
 - VIN bleibt explizite Konfiguration; `/v1/vehicles` dient der Validierung
 - dynamische Topics folgen der REST-JSON-Struktur; zusätzliche Kompatibilität ist Aufgabe des lokalen CSV-Mappings
 - Token und Secret werden nicht persistent gespeichert

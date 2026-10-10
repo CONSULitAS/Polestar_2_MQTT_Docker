@@ -124,14 +124,16 @@ def test_catalog_accepts_new_get_and_excludes_explicit_and_write_operations():
     charging = "/v1/vehicles/{vin}/charging/new-setting"
     telemetry = "/v1/vehicles/{vin}/telemetry/new_field/details"
     document = {"paths": {
-        telemetry: {"get": {}, "post": {}},
+        telemetry: {"get": {"x-required-scopes": ["test/read"]}, "post": {}},
         "/token": {"post": {}},
         "/v1/vehicles": {"get": {}},
-        charging: {"get": {}},
+        charging: {"get": {"x-required-scopes": ["test/read"]}},
         "/v1/vehicles/{vin}/charging/writeOnly": {"put": {}, "delete": {}},
         "x-extension": "metadata",
     }}
-    assert build_endpoint_catalog(document) == (charging, telemetry)
+    assert tuple(entry.path_template for entry in build_endpoint_catalog(document)) == (
+        charging, telemetry,
+    )
 
 
 @pytest.mark.parametrize("path", [
@@ -174,6 +176,117 @@ def test_bundled_catalog_contains_only_fifteen_vehicle_gets(tmp_path):
 
     catalog = build_endpoint_catalog(load_openapi_document(tmp_path / "missing"))
     assert len(catalog) == 15
-    assert "/v1/vehicles/{vin}/telemetry/battery" in catalog
-    assert "/token" not in catalog
-    assert "/v1/vehicles" not in catalog
+    paths = [entry.path_template for entry in catalog]
+    assert "/v1/vehicles/{vin}/telemetry/battery" in paths
+    assert "/token" not in paths
+    assert "/v1/vehicles" not in paths
+
+
+def make_endpoint(**metadata):
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog
+
+    operation = {"x-required-scopes": ["test/read"], **metadata}
+    return build_endpoint_catalog({"paths": {
+        "/v1/vehicles/{vin}/telemetry/new-field": {"get": operation},
+    }})[0]
+
+
+def test_metadata_is_copied_into_immutable_entry():
+    from dataclasses import FrozenInstanceError
+
+    scopes = ["test/read", "test/extra"]
+    models = ["Polestar 2"]
+    entry = make_endpoint(**{
+        "x-required-scopes": scopes, "x-supported-models": models,
+        "description": "Detailed description", "summary": "Short summary",
+    })
+    scopes.clear()
+    models.clear()
+    assert entry.topic_root == "/telemetry/new-field"
+    assert entry.required_scopes == ("test/read", "test/extra")
+    assert entry.supported_models == ("Polestar 2",)
+    assert entry.description == "Detailed description"
+    with pytest.raises(FrozenInstanceError):
+        entry.description = "changed"
+
+
+def test_optional_metadata_and_summary_fallback():
+    assert make_endpoint().description == ""
+    assert make_endpoint().supported_models is None
+    assert make_endpoint(summary="Short summary").description == "Short summary"
+
+
+@pytest.mark.parametrize("metadata", [
+    {"x-required-scopes": None}, {"x-required-scopes": []},
+    {"x-required-scopes": "test/read"}, {"x-required-scopes": [False]},
+    {"x-required-scopes": ["test/read test/write"]},
+    {"x-required-scopes": ["test/read\n"]}, {"x-required-scopes": ["test/é"]},
+    {"x-supported-models": None}, {"x-supported-models": "Polestar 2"},
+    {"x-supported-models": [""]}, {"x-supported-models": [2]},
+    {"description": None}, {"summary": []},
+])
+def test_invalid_metadata_is_rejected(metadata):
+    with pytest.raises(ConfigurationError):
+        make_endpoint(**metadata)
+
+
+def test_missing_required_scopes_is_rejected():
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog
+
+    with pytest.raises(ConfigurationError, match="x-required-scopes"):
+        build_endpoint_catalog({"paths": {
+            "/v1/vehicles/{vin}/charging/new-field": {"get": {}},
+        }})
+
+
+def test_request_path_normalizes_valid_vin():
+    entry = make_endpoint()
+    assert entry.request_path(" lpsvs000000000000 ") == (
+        "/v1/vehicles/LPSVS000000000000/telemetry/new-field"
+    )
+
+
+@pytest.mark.parametrize("vin", [
+    None, "", "../outside", "LPSVS00000000000I", "LPSVS000000000000/extra",
+    "LPSVS000000000000?x=y", "LPSVS000000000000%2f", "LPSVS000000000000\nother",
+])
+def test_request_path_rejects_invalid_vin_without_echoing_it(vin):
+    with pytest.raises(ConfigurationError) as error:
+        make_endpoint().request_path(vin)
+    if vin:
+        assert vin not in str(error.value)
+
+
+def test_request_path_rechecks_manually_constructed_template():
+    from dataclasses import replace
+
+    entry = replace(make_endpoint(), path_template="https://untrusted.invalid/{vin}")
+    with pytest.raises(ConfigurationError, match="template"):
+        entry.request_path("LPSVS000000000000")
+
+
+def test_bundled_metadata_uses_summary_and_preserves_model_hints(tmp_path):
+    from polestar_mqtt.openapi_catalog import build_endpoint_catalog, load_openapi_document
+
+    catalog = build_endpoint_catalog(load_openapi_document(tmp_path / "missing"))
+    entry = next(e for e in catalog if e.topic_root == "/charging/charge-locations")
+    assert entry.required_scopes == ("pdp-charging/chargeLocations",)
+    assert entry.supported_models == ("Polestar 3",)
+    assert entry.description
+
+
+def test_scope_aggregation_is_sorted_unique_and_uses_only_given_endpoints():
+    from polestar_mqtt.openapi_catalog import aggregate_scopes
+
+    first = make_endpoint(**{"x-required-scopes": ["test/z", "test/a", "test/z"]})
+    second = make_endpoint(**{"x-required-scopes": ["test/a", "test/b"]})
+    assert aggregate_scopes((first, second)) == "test/a test/b test/z"
+    assert aggregate_scopes((second, first)) == "test/a test/b test/z"
+    assert aggregate_scopes((second,)) == "test/a test/b"
+
+
+def test_empty_catalog_does_not_request_implicit_default_scopes():
+    from polestar_mqtt.openapi_catalog import aggregate_scopes
+
+    with pytest.raises(ConfigurationError, match="at least one scope"):
+        aggregate_scopes(())

@@ -141,8 +141,10 @@ class DataPortalHttpClient:
         self,
         client_id: str,
         client_secret: str,
+        *,
+        scope: str = BATTERY_SCOPE,
     ) -> requests.Response:
-        """Request an access token with the minimum Battery scope."""
+        """Request an access token with the configured scope snapshot."""
 
         return self.request(
             "POST",
@@ -150,7 +152,7 @@ class DataPortalHttpClient:
             json={
                 "clientId": client_id,
                 "clientSecret": client_secret,
-                "scope": BATTERY_SCOPE,
+                "scope": scope,
             },
         )
 
@@ -181,11 +183,13 @@ class TokenProvider:
         client_id: str,
         client_secret: str,
         *,
+        scope: str = BATTERY_SCOPE,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._http_client = http_client
         self._client_id = client_id
         self._client_secret = client_secret
+        self._scope = scope
         self._monotonic = monotonic
         self._token: AccessToken | None = None
 
@@ -209,6 +213,7 @@ class TokenProvider:
             response = self._http_client.request_token(
                 self._client_id,
                 self._client_secret,
+                scope=self._scope,
             )
         except requests.RequestException as error:
             safe_message = redact_sensitive_text(str(error), self._client_secret)
