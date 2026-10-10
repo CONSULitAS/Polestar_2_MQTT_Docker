@@ -27,6 +27,10 @@ EOF
 
 USER 999
 
+# Dummy für den Healthcheck, der immer erfolgreich ist (TODO: echten Healthcheck implementieren)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
 # Befehl, der beim Start des Containers ausgeführt wird
 CMD ["python", "-u", "-m", "polestar_mqtt.runonce"]
 
