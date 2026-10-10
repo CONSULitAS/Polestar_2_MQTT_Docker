@@ -85,14 +85,12 @@ jobs:
                 | "  \(.id)  \(.created_at)  tags=[\((.metadata.container.tags // []) | join(", "))]"
             ' /tmp/versions.json
             
-            # echo "Geschützte aktuelle Versionen:"
-            # cat /tmp/protected-ids.txt || true
-
             # Löschkandidaten:
             # - älter als MAX_AGE_DAYS
             # - nicht die aktuellste Version eines Tags
             #
             # Ungetaggte Versionen werden damit nach 90 Tagen vollständig gelöscht.
+            echo "Gelöschte Versionen:"
             jq -r \
                 --arg cutoff "${CUTOFF}" \
                 --rawfile protected /tmp/protected-ids.txt '
@@ -104,15 +102,6 @@ jobs:
                 | select(.id as $id | $protected_ids | index($id) | not)
                 | .id
                 ' /tmp/versions.json |
-            # while read -r ID; do
-            #     [[ -n "${ID}" ]] || continue
-
-            #     echo "Lösche Package-Version ${ID}"
-
-            #     gh api \
-            #     --method DELETE \
-            #     "/user/packages/container/${PACKAGE}/versions/${ID}"
-            # done
             while read -r ID; do
                 [[ -n "${ID}" ]] || continue
 
@@ -131,4 +120,5 @@ jobs:
                     --method DELETE \
                     "/user/packages/container/${PACKAGE}/versions/${ID}"
             done
+            echo "Fertig."
 # ***** EOF *****
