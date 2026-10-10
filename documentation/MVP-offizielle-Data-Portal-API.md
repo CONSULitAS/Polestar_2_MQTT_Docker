@@ -186,6 +186,42 @@ CSV-Datei `/local-files/mqtt_topic_mapping.csv` als zusätzliche Ausgaben
 konfiguriert. Ein Quellwert kann auf mehrere Ziel-Topics geschrieben werden;
 die dynamischen Standard-Topics bleiben stets erhalten.
 
+### Endpunktbezogene Log-Topics
+
+Festlegung vom 2026-10-10: Jeder katalogisierte Fahrzeugendpunkt erhält unter
+seiner MQTT-Wurzel einen eigenen Unterbaum `log` mit `state` und `timestamp`,
+beispielsweise `<base>/telemetry/battery/log/state` und
+`<base>/telemetry/battery/log/timestamp`. Dies gilt auch für Endpunkte, die
+keine Telemetriedaten liefern. Beide Topics werden retained mit QoS 1 publiziert.
+
+| Ergebnis des Endpunktabrufs | Payload in `log/state` |
+| --- | --- |
+| Erfolgreiche, fachlich gültige Antwort | `OK` |
+| NoData / `DATA_NOT_AVAILABLE` bzw. die erkannte Meldung `No … data is available for this vehicle` | Derselbe redigierte Text wie in der Konsole, einschließlich HTTP-Status, Fehlercode und Meldung, beispielsweise `404 / DATA_NOT_AVAILABLE: No is-at-charge-location data is available for this vehicle.` |
+| Anderer Fehler mit JSON-Fehlerbody | Der vollständige, redigierte Fehler-JSON-Body als JSON-Payload auf diesem einen Topic; nicht rekursiv in Untertopics auflösen |
+
+Fehlt ein JSON-Fehlerbody, etwa bei einem Transportfehler oder einer ungültigen
+Antwort, wird eine redigierte lokale Fehlerbeschreibung als JSON-Objekt mit
+`error.code` und `error.message` verwendet. Sie darf nicht als API-Body ausgegeben
+werden. Credentials, Tokens und VINs werden auch in diesen Log-Topics nicht
+veröffentlicht.
+
+`log/timestamp` enthält bei jedem abgeschlossenen Endpunktabruf den lokalen
+Ergebniszeitpunkt als ISO-8601-Zeitstempel in UTC, beispielsweise
+`2026-10-10T14:30:00Z`, unabhängig von Erfolg oder Fehler. Er gehört zum
+zugehörigen `state` und ist kein Messwert-Quellzeitstempel. Ein späterer Erfolg
+ersetzt den bisherigen Fehlerzustand durch `OK`. Wird ein NoData-Endpunkt für
+die aktuelle Client-Laufzeit von weiteren Abrufen ausgeschlossen, bleiben sein
+letzter Zustand und Zeitstempel erhalten; übersprungene Abrufe erzeugen keinen
+neuen Ergebniszeitpunkt.
+
+Der Unterbaum `<Endpunktwurzel>/log` ist für diese Diagnose reserviert.
+Dynamische Telemetrie und CSV-Mappings dürfen ihn nicht überschreiben;
+die Telemetrie-Inventarbereinigung darf seine Topics nicht löschen.
+Die Umsetzung wird in M6.3 des Migrationsplans geführt.
+
+### Übergreifende Betriebs-Topics
+
 Zusätzlich empfohlen:
 
 - `<base>/container/connected`: bestehendes LWT-Verhalten beibehalten

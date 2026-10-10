@@ -66,12 +66,12 @@ def test_runonce_confirms_all_topics_and_logs_no_vehicle_data(run_setup, capsys)
     assert main() == 0
     output = capsys.readouterr().out
     assert json.loads(output) == {
-        "data_portal": "successful", "mqtt": "acknowledged", "topics": 4,
+        "data_portal": "successful", "mqtt": "acknowledged", "topics": 34,
     }
-    assert info.wait_for_publish.call_count == 4
-    assert info.is_published.call_count == 4
+    assert info.wait_for_publish.call_count == 34
+    assert info.is_published.call_count == 34
     for invocation in client.publish.call_args_list:
-        assert invocation.args[0].startswith("polestar2-test/telemetry/battery/")
+        assert invocation.args[0].startswith("polestar2-test/")
         assert invocation.kwargs == {"qos": 1, "retain": True}
     client.username_pw_set.assert_called_once_with("fixture-user", "fixture-password")
     client.disconnect.assert_called_once()
@@ -89,7 +89,7 @@ def test_runonce_loads_mapping_and_publishes_additional_value(run_setup, tmp_pat
     )
     assert main() == 0
     client.publish.assert_any_call("polestar2-test/extra/soc", "50", qos=1, retain=True)
-    assert client.publish.call_count == 5
+    assert client.publish.call_count == 35
 
 
 @pytest.mark.parametrize("failure", ["publish", "ack", "connect", "timeout"])
@@ -124,12 +124,12 @@ def test_broker_rejection_does_not_publish(run_setup) -> None:
     client.publish.assert_not_called()
 
 
-# Ohne gültigen SoC oder andere Nutzdaten wird keine MQTT-Verbindung geöffnet.
-def test_invalid_soc_does_not_connect_to_mqtt(run_setup, requests_mock) -> None:
+# Ohne gültigen SoC werden Diagnosen veröffentlicht, der Lauf bleibt fehlgeschlagen.
+def test_invalid_soc_publishes_diagnostics(run_setup, requests_mock) -> None:
     _, _, factory, url = run_setup
     requests_mock.get(url, json={"data": {}, "meta": {"vin": "LPSVS000000000000"}})
     assert main() == 1
-    factory.assert_not_called()
+    factory.assert_called_once()
 
 
 # Transportfehler werden ohne möglicherweise vertrauliche Exception-Inhalte ausgegeben.
@@ -160,7 +160,7 @@ def test_inventory_contains_dynamic_and_mapping_topics_only(run_setup, tmp_path)
     assert inventory["version"] == 2
     assert inventory["unassigned_topics"] == []
     assert inventory["endpoints"]["/v1/vehicles/{vin}/telemetry/battery"] == sorted(
-        call.args[0] for call in client.publish.call_args_list
+        call.args[0] for call in client.publish.call_args_list if "/log/" not in call.args[0]
     )
     assert sum(len(topics) for topics in inventory["endpoints"].values()) == 5
 
@@ -171,7 +171,7 @@ def test_partial_publication_preserves_previous_inventory(run_setup, tmp_path) -
     state = tmp_path / "state.json"
     previous = '{"version":1,"topics":["old/topic"]}'
     state.write_text(previous)
-    info.is_published.side_effect = [True, False]
+    info.is_published.side_effect = [True] * 31 + [False]
     assert main() == 1
     assert state.read_text() == previous
 
@@ -294,16 +294,16 @@ def test_other_endpoint_failure_still_publishes_valid_battery(
     assert main() == 0
     summary = json.loads(capsys.readouterr().out)
     assert summary == {
-        "data_portal": "partial", "mqtt": "acknowledged", "topics": 4,
+        "data_portal": "partial", "mqtt": "acknowledged", "topics": 34,
         "failed_endpoints": 1,
     }
-    assert client.publish.call_count == 4
+    assert client.publish.call_count == 34
     assert (tmp_path / "state.json").is_file()
     assert requests_mock.call_count == 17
 
 
-# Ein Battery-Ausfall ohne andere Nutzdaten lässt MQTT und Inventar unverändert.
-def test_failed_battery_preserves_inventory_and_does_not_publish(
+# Ein Battery-Ausfall veröffentlicht Diagnosen und erhält das Telemetrie-Inventar.
+def test_failed_battery_preserves_inventory_and_publishes_logs(
     run_setup, requests_mock, tmp_path,
 ):
     _, _, factory, battery_url = run_setup
@@ -312,7 +312,7 @@ def test_failed_battery_preserves_inventory_and_does_not_publish(
     state.write_text(previous)
     requests_mock.get(battery_url, status_code=404, json={})
     assert main() == 1
-    factory.assert_not_called()
+    factory.assert_called_once()
     assert state.read_text() == previous
     assert requests_mock.call_count == 17
 
@@ -343,7 +343,7 @@ def test_battery_failure_does_not_block_other_publications(run_setup, requests_m
     )
     assert main() == 0
     assert json.loads(capsys.readouterr().out)["data_portal"] == "partial"
-    client.publish.assert_called_once_with(
+    client.publish.assert_any_call(
         "polestar2-test/telemetry/exterior/data/newField", "7", qos=1, retain=True,
     )
 
@@ -400,7 +400,7 @@ def test_later_publish_failure_preserves_confirmed_endpoint_update(
         DEFAULT_POLESTAR_API_BASE_URL + early.replace("{vin}", "LPSVS000000000000"),
         json={"data": {"value": 16}},
     )
-    info.is_published.side_effect = [True, False]
+    info.is_published.side_effect = [True] * 31 + [False]
     assert main() == 1
     endpoints, _ = load_topic_inventory(state)
     assert endpoints[battery] == ["old/battery"]
@@ -416,3 +416,129 @@ def test_corrupt_inventory_stops_before_network(run_setup, tmp_path, requests_mo
     assert requests_mock.call_count == 0
     factory.assert_not_called()
     assert state.read_text() == "broken"
+
+
+# Jeder Endpunkt erhält bestätigte Diagnosen mit UTC-Ergebniszeitpunkt außerhalb des Inventars.
+def test_endpoint_logs_have_iso_timestamp_and_stay_outside_inventory(run_setup, tmp_path):
+    from datetime import UTC, datetime
+
+    client, _, _, _ = run_setup
+    before = datetime.now(UTC)
+    assert main() == 0
+    after = datetime.now(UTC)
+    logs = {call.args[0]: call.args[1] for call in client.publish.call_args_list
+            if "/log/" in call.args[0]}
+    assert len(logs) == 30
+    for topic, value in logs.items():
+        if topic.endswith("/state"):
+            assert value == "OK"
+        else:
+            assert value.endswith("Z")
+            assert before <= datetime.fromisoformat(value) <= after
+    assert "/log/" not in (tmp_path / "state.json").read_text()
+
+
+# NoData übernimmt denselben Text wie die Konsole und ein späterer Erfolg setzt OK.
+def test_nodata_log_matches_console_and_recovers(run_setup, requests_mock, caplog):
+    client, _, _, _ = run_setup
+    url = DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior"
+    requests_mock.get(url, status_code=404, json={"error": {
+        "code": "DATA_NOT_AVAILABLE", "message": "No exterior data is available for this vehicle.",
+    }})
+    assert main() == 0
+    state = "404 / DATA_NOT_AVAILABLE: No exterior data is available for this vehicle."
+    assert state in caplog.messages
+    topic = "polestar2-test/telemetry/exterior/log/state"
+    client.publish.assert_any_call(topic, state, qos=1, retain=True)
+    requests_mock.get(url, json={"data": {"value": 1}})
+    client.reset_mock()
+    assert main() == 0
+    client.publish.assert_any_call(topic, "OK", qos=1, retain=True)
+
+
+# Fehlerbodies bleiben ein JSON-Wert; bekannte Secrets und sensible Felder werden redigiert.
+def test_error_log_preserves_json_structure_without_secrets(run_setup, requests_mock):
+    client, _, _, _ = run_setup
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior",
+        status_code=403, json={"error": {"code": "DENIED", "message": "client-secret"},
+                               "extra": [{"token": "unknown-secret", "value": 42}],
+                               "detail": "access-token-value LPSVS000000000000"},
+    )
+    assert main() == 0
+    payload = next(call.args[1] for call in client.publish.call_args_list
+                   if call.args[0] == "polestar2-test/telemetry/exterior/log/state")
+    body = json.loads(payload)
+    assert body["error"]["code"] == "DENIED"
+    assert body["extra"] == [{"token": "[REDACTED]", "value": 42}]
+    for secret in ("client-secret", "unknown-secret", "access-token-value", "LPSVS000000000000"):
+        assert secret not in payload
+
+
+# Antworten ohne JSON-Fehlerbody erhalten einen ausdrücklich lokalen JSON-Fehler.
+def test_non_json_error_uses_local_error_object(run_setup, requests_mock):
+    client, _, _, _ = run_setup
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior",
+        status_code=403, text="private server details",
+    )
+    assert main() == 0
+    payload = next(call.args[1] for call in client.publish.call_args_list
+                   if call.args[0] == "polestar2-test/telemetry/exterior/log/state")
+    assert json.loads(payload)["source"] == "local"
+    assert "private server details" not in payload
+
+
+@pytest.mark.parametrize("target", [
+    "telemetry/exterior/log", "telemetry/exterior/log/state",
+    "absolute:polestar2-test/telemetry/exterior/log/custom/nested",
+])
+# Auch fehlende Mapping-Quellen dürfen keinen Teil des Diagnosebaums belegen.
+def test_mapping_cannot_overwrite_endpoint_logs(run_setup, tmp_path, target):
+    _, _, factory, _ = run_setup
+    (tmp_path / "mapping.csv").write_text("source_path,target_topic\nmissing," + target + "\n")
+    assert main() == 1
+    factory.assert_not_called()
+
+
+# Ein API-Feld namens log darf den reservierten Diagnosebaum nicht überschreiben.
+def test_dynamic_data_cannot_overwrite_endpoint_logs(run_setup, requests_mock):
+    _, _, factory, _ = run_setup
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior",
+        json={"log": {"state": "injected"}},
+    )
+    assert main() == 1
+    factory.assert_not_called()
+
+
+# Ein Transportfehler erhält einen lokalen Diagnosezustand ohne vertraulichen Exception-Text.
+def test_transport_error_is_published_as_safe_local_diagnostic(
+    run_setup, requests_mock, monkeypatch,
+):
+    import requests
+
+    client, _, _, _ = run_setup
+    monkeypatch.setattr("polestar_mqtt.polestar_api.time.sleep", lambda _: None)
+    monkeypatch.setattr("polestar_mqtt.polestar_api.DataPortalClient._backoff_seconds",
+                        lambda *args: 0)
+    requests_mock.get(
+        DEFAULT_POLESTAR_API_BASE_URL + "/v1/vehicles/LPSVS000000000000/telemetry/exterior",
+        exc=requests.ConnectionError("private connection details"),
+    )
+    assert main() == 0
+    payload = next(call.args[1] for call in client.publish.call_args_list
+                   if call.args[0] == "polestar2-test/telemetry/exterior/log/state")
+    body = json.loads(payload)
+    assert body["source"] == "local"
+    assert body["error"]["code"] == "DataPortalRequestError"
+    assert "private connection details" not in payload
+
+
+# Nicht bestätigte Diagnose-Publishes verhindern einen erfolgreichen Abschluss.
+def test_log_ack_failure_fails_before_telemetry(run_setup, tmp_path):
+    client, info, _, _ = run_setup
+    info.is_published.side_effect = [True, False]
+    assert main() == 1
+    assert all("/log/" in call.args[0] for call in client.publish.call_args_list)
+    assert not (tmp_path / "state.json").exists()

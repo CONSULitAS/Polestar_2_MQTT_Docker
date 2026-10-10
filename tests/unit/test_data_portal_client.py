@@ -87,8 +87,10 @@ def test_matching_message_excludes_only_current_endpoint_until_new_client(
     client, _ = make_client(sleep=lambda _: pytest.fail("Excluded endpoint must not retry"))
     _, failures = client.get_catalog(catalog, VIN)
     assert catalog[0].path_template in failures
+    assert catalog[0].path_template in client.endpoint_logs
     _, failures = client.get_catalog(catalog, VIN)
     assert failures == {catalog[0].path_template: "DataPortalEndpointExcludedError"}
+    assert catalog[0].path_template not in client.endpoint_logs
     assert [r.url for r in requests_mock.request_history].count(unavailable) == 1
     assert requests_mock.call_count == 5
     assert caplog.messages == [

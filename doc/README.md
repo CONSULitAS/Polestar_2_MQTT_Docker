@@ -40,6 +40,22 @@ es ist noch kein vollständiges Wiederanlaufprotokoll. Das Inventar wird derzeit
 noch nicht zur Bereinigung verwaister retained Topics verwendet. Dauerhafte Container-Einbindung,
 Broker-/Instanzzuordnung und Wiederaufnahme nach Prozessabstürzen folgen separat.
 
+Jeder katalogisierte Endpunkt veröffentlicht außerdem `<Endpunktwurzel>/log/state`
+und `<Endpunktwurzel>/log/timestamp` retained mit bestätigtem QoS 1. `state` enthält
+bei erfolgreichem, gültigem Abruf `OK`, bei NoData den redigierten Konsolentext
+und bei anderen HTTP-Fehlern den redigierten JSON-Fehlerbody als einzelne Payload.
+Ohne JSON-Fehlerbody wird ein Fehlerobjekt mit `source: "local"`, `error.code`
+und `error.message` ausgegeben. `timestamp` ist der Ergebniszeitpunkt des Abrufs
+in ISO 8601 und UTC (`Z`), nicht der Quellzeitstempel eines Messwerts.
+Bei für die Client-Laufzeit ausgeschlossenen NoData-Endpunkten bleibt der letzte
+Zustand unverändert, bis wieder ein Abruf stattfindet.
+
+Die Log-Topics liegen außerhalb des Telemetrie-Inventars. Ihr gesamter Unterbaum
+ist für Diagnosen reserviert; dynamische API-Felder und relative oder absolute
+CSV-Ziele dürfen ihn nicht belegen. Diagnosen werden auch ohne publizierbare
+Nutzdaten gesendet; in diesem Fall endet der Einmallauf weiterhin mit Exit-Code 1.
+Die Zusammenfassung zählt Telemetrie- und Diagnose-Publishes gemeinsam.
+
 Für die Battery-Ausgabe ist die Wurzel
 `<MQTT_BASE_TOPIC>/telemetry/battery` festgelegt. Die Programmsteuerung soll dem
 Publisher die vollständige, fachlich validierte Battery-Antwort einschließlich

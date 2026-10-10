@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import logging
 import random
 import re
@@ -54,6 +55,27 @@ def _safe_error_text(value: str, sensitive_values: list[str]) -> str:
     value = redact_sensitive_text(value, *sensitive_values)
     value = re.sub(r"\b[A-HJ-NPR-Z0-9]{17}\b", "[REDACTED]", value, flags=re.IGNORECASE)
     return " ".join(value.split())
+
+
+def _safe_error_body(value: Any, sensitive: list[str]) -> Any:
+    if isinstance(value, dict):
+        return {
+            _safe_error_text(key, sensitive): (
+                "[REDACTED]" if re.sub(r"[^a-z]", "", key.lower()) in {
+                    "vin", "clientid", "clientsecret", "accesstoken", "refreshtoken",
+                    "authorization", "password", "token", "secret", "accountid",
+                } else _safe_error_body(item, sensitive)
+            ) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_safe_error_body(item, sensitive) for item in value]
+    return _safe_error_text(value, sensitive) if isinstance(value, str) else value
+
+
+def local_error_state(error: Exception) -> str:
+    return json.dumps({"source": "local", "error": {
+        "code": type(error).__name__, "message": "Endpoint request or validation failed",
+    }})
 
 
 class TokenProviderError(RuntimeError):
@@ -155,6 +177,7 @@ class DataPortalHttpClient:
         self.timeout = timeout
         self.session = session if session is not None else requests.Session()
         self._owns_session = session is None
+        self._sensitive_values: set[str] = set()
         self.session.headers.setdefault("Accept", "application/json")
 
     def request(
@@ -168,20 +191,35 @@ class DataPortalHttpClient:
         if not path.startswith("/"):
             raise ValueError("path must start with '/'")
         kwargs.setdefault("timeout", self.timeout)
+        headers = kwargs.get("headers", {})
+        body = kwargs.get("json", {})
+        self._sensitive_values.update(filter(None, (
+            headers.get("Authorization", "").removeprefix("Bearer "),
+            headers.get("x-client-id", ""),
+            body.get("clientId", ""), body.get("clientSecret", ""),
+        )))
         response = self.session.request(method, f"{self.base_url}{path}", **kwargs)
         if response.status_code >= 400:
             code, message = _error_details(response)
-            headers = kwargs.get("headers", {})
-            body = kwargs.get("json", {})
-            sensitive = [
-                headers.get("Authorization", "").removeprefix("Bearer "),
-                headers.get("x-client-id", ""),
-                body.get("clientId", ""), body.get("clientSecret", ""),
-            ]
+            sensitive = list(self._sensitive_values)
             logger.warning(
                 "%s / %s: %s", response.status_code,
                 _safe_error_text(code, sensitive), _safe_error_text(message, sensitive),
             )
+            if code == "DATA_NOT_AVAILABLE" or NO_VEHICLE_DATA_PATTERN.search(message):
+                response.endpoint_log_state = (
+                    f"{response.status_code} / {_safe_error_text(code, sensitive)}: "
+                    f"{_safe_error_text(message, sensitive)}"
+                )
+            else:
+                try:
+                    response.endpoint_log_state = json.dumps(
+                        _safe_error_body(response.json(), sensitive), ensure_ascii=False,
+                    )
+                except ValueError:
+                    response.endpoint_log_state = local_error_state(
+                        DataPortalResponseError(),
+                    )
         return response
 
     def request_token(
@@ -345,6 +383,7 @@ class DataPortalClient:
         self._random_uniform = random_uniform
         self._utcnow = utcnow
         self._excluded_paths: set[str] = set()
+        self.endpoint_logs: dict[str, tuple[str, str]] = {}
 
     def authorization_headers(self, *, force_refresh: bool = False) -> dict[str, str]:
         """Build the required headers without persisting them on the session."""
@@ -408,11 +447,13 @@ class DataPortalClient:
     def get_catalog(
         self, catalog: tuple[Endpoint, ...], vin: str,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-        """Read every endpoint, keeping successful responses and safe error types."""
+        """Read endpoints and retain safe diagnostics for requests made in this cycle."""
 
         responses = {}
         failures = {}
+        self.endpoint_logs = {}
         for endpoint in catalog:
+            state = "OK"
             try:
                 responses[endpoint.path_template] = self.get_endpoint(endpoint, vin)
             except (DataPortalRequestError, DataPortalResponseError, TokenProviderError) as error:
@@ -423,6 +464,12 @@ class DataPortalClient:
                             type(error).__name__,
                         )
                 failures[endpoint.path_template] = type(error).__name__
+                if isinstance(error, DataPortalEndpointExcludedError):
+                    continue
+                state = getattr(error, "endpoint_log_state", local_error_state(error))
+            self.endpoint_logs[endpoint.path_template] = (
+                state, self._utcnow().astimezone(UTC).isoformat().replace("+00:00", "Z"),
+            )
         return responses, failures
 
     def get_battery(self, vin: str) -> dict[str, Any]:
@@ -485,7 +532,7 @@ class DataPortalClient:
                 and NO_VEHICLE_DATA_PATTERN.search(message)
             ):
                 self._excluded_paths.add(path)
-                self._raise_for_status(response.status_code, endpoint_name)
+                self._raise_response_error(response, endpoint_name)
             if response.status_code == 401 and not token_refreshed:
                 token_refreshed = True
                 continue
@@ -497,7 +544,16 @@ class DataPortalClient:
                 transient_retries += 1
                 token_refreshed = False
                 continue
+            self._raise_response_error(response, endpoint_name)
+
+    def _raise_response_error(self, response: requests.Response, endpoint_name: str) -> None:
+        try:
             self._raise_for_status(response.status_code, endpoint_name)
+        except DataPortalRequestError as error:
+            error.endpoint_log_state = getattr(
+                response, "endpoint_log_state", local_error_state(error),
+            )
+            raise
 
     def _backoff_seconds(
         self,

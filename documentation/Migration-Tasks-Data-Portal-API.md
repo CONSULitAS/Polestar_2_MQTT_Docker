@@ -326,6 +326,18 @@ passend zu `No .* data is available for this vehicle`; kein persistentes Mapping
     ein Endpunkt mit HTTP 404, Teilbetrieb erfolgreich, Exit-Code 0.
     Endpunktbezogenes Inventar und Retained-Bereinigung bleiben M6.2 vorbehalten.
 - [ ] Fehler je Endpunkt isolieren: Ein nicht unterstützter oder vorübergehend fehlerhafter Endpunkt darf andere Endpunkte desselben Zyklus nicht blockieren. Retained-Bereinigung nur für einen fachlich erfolgreich und gültig verarbeiteten Endpunkt ausführen.
+  - 2026-10-10: Endpunktbezogenes Topic-Inventar in `b6896ba` umgesetzt.
+    Nach bestätigter Veröffentlichung wird nur der jeweilige Endpunktbestand
+    atomar ersetzt; API-Fehler und nicht bestätigte Publishes erhalten dessen
+    vorherigen Bestand. Bereits bestätigte andere Endpunkte bleiben gespeichert.
+    Formatversion 1 wird ohne geratene Zuordnung als `unassigned_topics` erhalten;
+    beschädigte Inventare stoppen vor Netzwerkzugriffen. Unveränderte Mengen
+    werden nicht erneut geschrieben. `./run_tests.sh`: Ruff, 390 Tests und
+    Legacy-Einmallauf erfolgreich, Exit-Code 0. Anschließender lokaler Lauf
+    `./run_local.sh runonce-DataPortalAPI` auf Commit `b6896ba`: 243 Topics
+    bestätigt, ein Endpunkt mit `404 DATA_NOT_AVAILABLE`, Exit-Code 0.
+    Retained-Löschung, Broker-/Instanzzuordnung und vollständige
+    Absturz-Wiederaufnahme bleiben in M6.2 offen; kein Container-Test.
   - 2026-10-10: Abruffehler werden getrennt von erfolgreichen Antworten
     zurückgegeben und verhindern keine gültige Battery-Veröffentlichung mehr.
     Teilbetrieb wird ausdrücklich als `partial` samt Fehleranzahl gemeldet.
@@ -521,6 +533,24 @@ bleiben offen; die vorbereitende Dateiersetzung schließt diese Aufgaben nicht a
 
 ### M6.3 – Betriebsstatus, Change Detection und openWB
 
+- [ ] Endpunktbezogene Diagnose gemäß [Konzept](MVP-offizielle-Data-Portal-API.md#endpunktbezogene-log-topics) umsetzen (Nutzervorgabe 2026-10-10): unter jeder Endpunktwurzel `log/state` und `log/timestamp` retained mit QoS 1 publizieren. Bei fachlichem Erfolg `OK`, bei NoData den redigierten Konsolentext, bei anderen Fehlern den redigierten Fehler-JSON-Body als einzelne Payload ausgeben; ohne JSON-Body ein ausdrücklich lokal erzeugtes Fehlerobjekt verwenden. Ergebniszeitpunkt als ISO-8601 in UTC setzen; bei übersprungenen NoData-Endpunkten unverändert lassen.
+- [ ] Den endpunktbezogenen `log`-Unterbaum vor dynamischer Telemetrie, Mapping-Kollisionen und Telemetrie-Inventarbereinigung schützen. Tests für Erfolg, NoData, JSON-Fehlerbody, Fehler ohne JSON-Body, Redigierung, ISO-Zeitstempel und Fehlererholung ergänzen.
+  - 2026-10-10: Diagnoseausgabe im Data-Portal-Einmallauf umgesetzt: `log/state`
+    und `log/timestamp` für jeden tatsächlich abgerufenen Katalogendpunkt,
+    bestätigt mit QoS 1 und Retain. API-Client stellt redigierte Fehlerbodies
+    und Ergebniszeitpunkte bereit; übersprungene NoData-Endpunkte erhalten
+    keinen neuen Zeitstempel. Lokale Validierungs-/Transportfehler werden als
+    lokale JSON-Fehler markiert. Diagnosebäume sind gegen dynamische Ausgabe
+    und Mapping-Ziele geschützt und werden nicht ins Telemetrie-Inventar
+    aufgenommen. Auch ohne Nutzdaten erfolgt Diagnoseausgabe bei Exit-Code 1.
+    Basis `b6896ba` mit lokalen Code-, Test- und Dokumentationsänderungen:
+    `./run_tests.sh` mit Ruff, 400 bestandenen Tests und Legacy-Einmallauf,
+    Exit-Code 0. `./run_local.sh runonce-DataPortalAPI`: 273 Publishes bestätigt
+    (243 Telemetrie-/Mapping- und 30 Diagnose-Topics), ein Endpunkt mit
+    `404 DATA_NOT_AVAILABLE`, Exit-Code 0. Kein Container-Test.
+    Einbindung in den dauerhaften Polling-Ablauf und Schutz in der noch
+    ausstehenden Retained-Bereinigung bleiben offen; daher bleiben die
+    übergreifenden Aufgaben noch unvollständig.
 - [ ] Bestehendes LWT unter `<base>/container/connected` beibehalten.
 - [ ] `<base>/container/last_update` als Zeitpunkt des letzten fachlich erfolgreichen Battery-Abrufs definieren und nur dann aktualisieren. Abrufzeit, Quellzeit und MQTT-Zustellstatus unterscheiden; ein alter Quellzeitstempel darf nicht als neue Messung dargestellt werden.
 - [ ] Redigierten Fehlerstatus unter `<base>/container/last_error` bereitstellen.

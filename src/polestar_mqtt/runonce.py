@@ -14,6 +14,7 @@ from polestar_mqtt.openapi_catalog import (
 )
 from polestar_mqtt.polestar_api import (
     DataPortalClient, DataPortalHttpClient, DataPortalResponseError, TokenProvider,
+    local_error_state,
 )
 from polestar_mqtt.publisher import (
     TopicMappingError, flatten_json_topics, load_topic_mapping, publish_json_topics,
@@ -70,12 +71,27 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
                 api.extract_soc(battery)
                 api.validate_response_vin(battery, config.vin)
                 api.extract_source_timestamp(battery)
-            except DataPortalResponseError:
+            except DataPortalResponseError as error:
                 failures[battery_path] = "DataPortalResponseError"
+                _, timestamp = api.endpoint_logs[battery_path]
+                api.endpoint_logs[battery_path] = (local_error_state(error), timestamp)
                 del responses[battery_path]
 
     publications = []
     dynamic_topics = set()
+    log_roots = {
+        config.mqtt_base_topic.rstrip("/") + endpoint.topic_root + "/log"
+        for endpoint in catalog
+    }
+
+    def validate_telemetry_topic(topic: str) -> None:
+        validate_publish_topic(topic)
+        if any(topic == root or topic.startswith(root + "/") for root in log_roots):
+            raise TopicMappingError("Telemetry target overlaps endpoint log namespace")
+
+    for targets in mapping.values():
+        for topic in targets:
+            validate_telemetry_topic(topic)
     for endpoint in catalog:
         if endpoint.path_template not in responses:
             continue
@@ -83,15 +99,23 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
         validate_publish_topic(root)
         payload = responses[endpoint.path_template]
         for topic, _ in flatten_json_topics(root, payload):
-            validate_publish_topic(topic)
+            validate_telemetry_topic(topic)
             if topic in dynamic_topics:
                 raise TopicMappingError("Dynamic endpoint topics overlap")
             dynamic_topics.add(topic)
         endpoint_mapping = mapping if endpoint.path_template == battery_path else {}
         publications.append((endpoint.path_template, root, payload, endpoint_mapping))
     validate_mapping_targets(mapping, dynamic_topics)
-    if not dynamic_topics:
-        raise DataPortalResponseError("No publishable endpoint data is available")
+    log_publications = []
+    for endpoint in catalog:
+        if endpoint.path_template not in api.endpoint_logs:
+            continue
+        root = config.mqtt_base_topic.rstrip("/") + endpoint.topic_root + "/log"
+        state, timestamp = api.endpoint_logs[endpoint.path_template]
+        for name, value in (("state", state), ("timestamp", timestamp)):
+            topic = root + "/" + name
+            validate_publish_topic(topic)
+            log_publications.append((topic, value))
 
     connected = Event()
     accepted = False
@@ -119,6 +143,9 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
             raise MqttRunError("MQTT connection rejected")
         publisher = ConfirmedPublisher(client)
         topics = []
+        for topic, value in log_publications:
+            publisher.publish(topic, value, qos=1, retain=True)
+            topics.append(topic)
         for endpoint_path, root, payload, endpoint_mapping in publications:
             confirmed = publish_json_topics(publisher, root, payload, mapping=endpoint_mapping)
             topics.extend(confirmed)
@@ -128,6 +155,8 @@ def run_once(config: DataPortalConfig) -> tuple[int, int]:
             save_topic_inventory(
                 config.mqtt_topic_state_file, inventory, unassigned_topics=unassigned_topics,
             )
+        if not dynamic_topics:
+            raise DataPortalResponseError("No publishable endpoint data is available")
         return len(topics), len(failures)
     finally:
         try:
