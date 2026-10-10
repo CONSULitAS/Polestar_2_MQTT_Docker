@@ -22,6 +22,12 @@
 - [ ] OpenWB-Topic vollständig per ENV konfigurierbar machen
 - [ ] Logging strukturieren
 - [ ] Weitere testbare Kernlogik aus `src/Polestar_2_MQTT.py` extrahieren
+- [ ] Dauerhaftes Polling, Fehlererholung und sauberes Herunterfahren (M7).
+- [ ] MQTT-Reconnect, Container-Status und LWT in der neuen Laufzeit umsetzen.
+- [ ] Docker-HEALTHCHECK implementieren und im Dockerfile einbinden.
+- [ ] Separate OpenWB-Weiterleitung einschließlich konfigurierbarem Ziel-Topic umsetzen.
+- [ ] Telemetrie-/Response-Validierung und strukturierte Diagnose weiter härten.
+- [ ] Container-/Release-Abnahme gemäß M8/M8A/M9 abschließen.
 
 ## Chronologischer Verlauf
 
