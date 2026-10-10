@@ -1,0 +1,106 @@
+name: Cleanup old GHCR images
+
+on:
+  schedule:
+    - cron: "17 3 * * 0"   # sonntags 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  PACKAGE: polestar_2_mqtt_docker
+  MAX_AGE_DAYS: 90
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Alte Package-Versionen löschen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Alle Package-Versionen holen.
+          # --slurp bündelt die paginierten Antworten; jq wird extern benutzt,
+          # da gh --slurp und gh --jq nicht gemeinsam unterstützt.
+          gh api \
+            --paginate \
+            --slurp \
+            "/user/packages/container/${PACKAGE}/versions?per_page=100" \
+            > /tmp/versions.json
+
+          # Unix-Zeitstempel für die Altersgrenze berechnen.
+          CUTOFF="$(
+            date -u \
+              -d "${MAX_AGE_DAYS} days ago" \
+              '+%Y-%m-%dT%H:%M:%SZ'
+          )"
+
+          echo "Lösche Versionen älter als: ${CUTOFF}"
+
+          # Ermitteln, welche Package-Versionen geschützt werden:
+          #
+          # Für jeden vorhandenen Docker-Tag wird die neueste Package-Version
+          # gesucht. Diese Version bleibt erhalten – unabhängig vom Alter.
+          #
+          # Eine Package-Version kann mehrere Tags besitzen. Deshalb werden
+          # die IDs anschließend eindeutig zusammengeführt.
+          jq -r '
+            add
+            | [
+                .[]
+                | select(.metadata.container.tags | length > 0)
+                | . as $version
+                | $version.metadata.container.tags[]
+                | {
+                    tag: .,
+                    id: $version.id,
+                    created_at: $version.created_at
+                  }
+              ]
+            | group_by(.tag)
+            | map(
+                sort_by(.created_at)
+                | reverse
+                | .[0].id
+              )
+            | unique
+            | .[]
+          ' /tmp/versions.json \
+            > /tmp/protected-ids.txt
+
+          echo "Geschützte aktuelle Versionen:"
+          cat /tmp/protected-ids.txt || true
+
+          # Löschkandidaten:
+          # - älter als MAX_AGE_DAYS
+          # - nicht die aktuellste Version eines Tags
+          #
+          # Ungetaggte Versionen werden damit nach 90 Tagen vollständig gelöscht.
+          jq -r \
+            --arg cutoff "${CUTOFF}" \
+            --rawfile protected /tmp/protected-ids.txt '
+              ($protected | split("\n") | map(select(length > 0) | tonumber)) as $protected_ids
+
+              | add
+              | .[]
+              | select(.created_at < $cutoff)
+              | select(.id as $id | $protected_ids | index($id) | not)
+              | .id
+            ' /tmp/versions.json |
+          while read -r ID; do
+            [[ -n "${ID}" ]] || continue
+
+            echo "Lösche Package-Version ${ID}"
+
+            gh api \
+              --method DELETE \
+              "/user/packages/container/${PACKAGE}/versions/${ID}"
+          done
+
+# ***** EOF *****
