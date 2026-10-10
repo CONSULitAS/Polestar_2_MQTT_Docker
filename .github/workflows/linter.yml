@@ -24,6 +24,10 @@ on:
   pull_request:
     branches: [master, main]
 
+# Restrict default GITHUB_TOKEN permissions to least privilege
+permissions:
+  contents: read
+
 ###############
 # Set the Job #
 ###############
