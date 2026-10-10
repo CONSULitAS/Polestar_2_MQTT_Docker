@@ -7,6 +7,7 @@ from graphql_queries import (
 # tests for GraphQL payload builders
 
 
+# Die Fahrzeuglisten-Abfrage verwendet die vorgesehene GraphQL-Operation.
 def test_build_getconsumercarsv2_payload_uses_expected_operation_and_query():
     payload = build_getconsumercarsv2_payload()
 
@@ -16,6 +17,7 @@ def test_build_getconsumercarsv2_payload_uses_expected_operation_and_query():
     assert "getConsumerCarsV2" in payload["query"]
 
 
+# Die Telemetrie-Abfrage wird dem angefragten Fahrzeug zugeordnet.
 def test_build_cartelematicsv2_payload_contains_requested_vin():
     payload = build_cartelematicsv2_payload("VIN123")
 

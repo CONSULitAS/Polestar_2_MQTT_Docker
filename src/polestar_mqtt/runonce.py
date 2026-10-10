@@ -12,8 +12,13 @@ from polestar_mqtt.config import ConfigurationError, DataPortalConfig
 from polestar_mqtt.openapi_catalog import (
     aggregate_scopes, build_endpoint_catalog, load_openapi_document,
 )
-from polestar_mqtt.polestar_api import DataPortalClient, DataPortalHttpClient, TokenProvider
-from polestar_mqtt.publisher import load_topic_mapping, publish_json_topics, validate_publish_topic
+from polestar_mqtt.polestar_api import (
+    DataPortalClient, DataPortalHttpClient, DataPortalResponseError, TokenProvider,
+)
+from polestar_mqtt.publisher import (
+    TopicMappingError, flatten_json_topics, load_topic_mapping, publish_json_topics,
+    validate_mapping_targets, validate_publish_topic,
+)
 
 from polestar_mqtt.topic_inventory import save_topic_inventory
 
@@ -45,22 +50,47 @@ class ConfirmedPublisher:
         return result
 
 
-def run_once(config: DataPortalConfig) -> int:
-    """Fetch one valid Battery snapshot and publish to the configured broker."""
+def run_once(config: DataPortalConfig) -> tuple[int, int]:
+    """Fetch all endpoints and publish successful responses to the broker."""
 
     catalog = build_endpoint_catalog(load_openapi_document(config.openapi_file))
     scope = aggregate_scopes(catalog)
     mapping = load_topic_mapping(config.mqtt_topic_mapping_file, config.mqtt_base_topic)
-    root = f"{config.mqtt_base_topic.rstrip('/')}/telemetry/battery"
-    validate_publish_topic(root)
+    battery_path = "/v1/vehicles/{vin}/telemetry/battery"
 
     with DataPortalHttpClient(config.api_base_url) as http:
         provider = TokenProvider(http, config.client_id, config.client_secret, scope=scope)
         api = DataPortalClient(http, provider, config.account_id)
         api.ensure_vehicle_authorized(config.vin)
-        battery = api.get_battery(config.vin)
-        api.extract_soc(battery)
-        api.extract_source_timestamp(battery)
+        responses, failures = api.get_catalog(catalog, config.vin)
+        battery = responses.get(battery_path)
+        if battery is not None:
+            try:
+                api.extract_soc(battery)
+                api.validate_response_vin(battery, config.vin)
+                api.extract_source_timestamp(battery)
+            except DataPortalResponseError:
+                failures[battery_path] = "DataPortalResponseError"
+                del responses[battery_path]
+
+    publications = []
+    dynamic_topics = set()
+    for endpoint in catalog:
+        if endpoint.path_template not in responses:
+            continue
+        root = config.mqtt_base_topic.rstrip("/") + endpoint.topic_root
+        validate_publish_topic(root)
+        payload = responses[endpoint.path_template]
+        for topic, _ in flatten_json_topics(root, payload):
+            validate_publish_topic(topic)
+            if topic in dynamic_topics:
+                raise TopicMappingError("Dynamic endpoint topics overlap")
+            dynamic_topics.add(topic)
+        endpoint_mapping = mapping if endpoint.path_template == battery_path else {}
+        publications.append((root, payload, endpoint_mapping))
+    validate_mapping_targets(mapping, dynamic_topics)
+    if not dynamic_topics:
+        raise DataPortalResponseError("No publishable endpoint data is available")
 
     connected = Event()
     accepted = False
@@ -86,9 +116,12 @@ def run_once(config: DataPortalConfig) -> int:
             raise MqttRunError("MQTT connection acknowledgement timed out")
         if not accepted:
             raise MqttRunError("MQTT connection rejected")
-        topics = publish_json_topics(ConfirmedPublisher(client), root, battery, mapping=mapping)
+        publisher = ConfirmedPublisher(client)
+        topics = []
+        for root, payload, endpoint_mapping in publications:
+            topics.extend(publish_json_topics(publisher, root, payload, mapping=endpoint_mapping))
         save_topic_inventory(config.mqtt_topic_state_file, topics)
-        return len(topics)
+        return len(topics), len(failures)
     finally:
         try:
             client.disconnect()
@@ -105,7 +138,7 @@ def main() -> int:
         print("Data Portal runonce: invalid configuration")
         return 2
     try:
-        count = run_once(config)
+        count, failed_endpoints = run_once(config)
     except ConfigurationError:
         print("Data Portal runonce: invalid file configuration")
         return 2
@@ -113,7 +146,13 @@ def main() -> int:
         # Transport exceptions can contain credentials, URLs or response data.
         print(f"Data Portal runonce failed ({type(error).__name__})")
         return 1
-    print(json.dumps({"data_portal": "successful", "mqtt": "acknowledged", "topics": count}))
+    summary = {
+        "data_portal": "partial" if failed_endpoints else "successful",
+        "mqtt": "acknowledged", "topics": count,
+    }
+    if failed_endpoints:
+        summary["failed_endpoints"] = failed_endpoints
+    print(json.dumps(summary))
     return 0
 
 

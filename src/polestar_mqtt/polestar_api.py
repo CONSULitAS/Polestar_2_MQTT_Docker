@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import logging
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -15,6 +17,7 @@ from urllib.parse import quote
 import requests
 
 from polestar_mqtt.config import VIN_PATTERN, redact_sensitive_text, validate_api_base_url
+from polestar_mqtt.openapi_catalog import Endpoint
 
 
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
@@ -25,6 +28,32 @@ TRANSIENT_HTTP_STATUS_CODES = frozenset({429, 500, 503})
 DEFAULT_MAX_TRANSIENT_RETRIES = 3
 DEFAULT_INITIAL_BACKOFF_SECONDS = 1.0
 DEFAULT_MAX_BACKOFF_SECONDS = 30.0
+logger = logging.getLogger(__name__)
+NO_VEHICLE_DATA_PATTERN = re.compile(r"No .* data is available for this vehicle")
+
+
+def _error_details(response: requests.Response) -> tuple[str, str]:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    error = payload.get("error")
+    if isinstance(error, dict):
+        code, message = error.get("code"), error.get("message")
+    else:
+        code, message = error, payload.get("error_description")
+    return (
+        code if isinstance(code, str) and code else "HTTP_ERROR",
+        message if isinstance(message, str) and message else "No valid API error message",
+    )
+
+
+def _safe_error_text(value: str, sensitive_values: list[str]) -> str:
+    value = redact_sensitive_text(value, *sensitive_values)
+    value = re.sub(r"\b[A-HJ-NPR-Z0-9]{17}\b", "[REDACTED]", value, flags=re.IGNORECASE)
+    return " ".join(value.split())
 
 
 class TokenProviderError(RuntimeError):
@@ -65,6 +94,10 @@ class DataPortalForbiddenError(DataPortalRequestError):
 
 class DataPortalNotFoundError(DataPortalRequestError):
     """Raised when the requested vehicle data is unavailable."""
+
+
+class DataPortalEndpointExcludedError(DataPortalRequestError):
+    """Raised without a request for an endpoint excluded during this run."""
 
 
 class DataPortalRateLimitError(DataPortalRequestError):
@@ -135,7 +168,21 @@ class DataPortalHttpClient:
         if not path.startswith("/"):
             raise ValueError("path must start with '/'")
         kwargs.setdefault("timeout", self.timeout)
-        return self.session.request(method, f"{self.base_url}{path}", **kwargs)
+        response = self.session.request(method, f"{self.base_url}{path}", **kwargs)
+        if response.status_code >= 400:
+            code, message = _error_details(response)
+            headers = kwargs.get("headers", {})
+            body = kwargs.get("json", {})
+            sensitive = [
+                headers.get("Authorization", "").removeprefix("Bearer "),
+                headers.get("x-client-id", ""),
+                body.get("clientId", ""), body.get("clientSecret", ""),
+            ]
+            logger.warning(
+                "%s / %s: %s", response.status_code,
+                _safe_error_text(code, sensitive), _safe_error_text(message, sensitive),
+            )
+        return response
 
     def request_token(
         self,
@@ -297,6 +344,7 @@ class DataPortalClient:
         self._sleep = sleep
         self._random_uniform = random_uniform
         self._utcnow = utcnow
+        self._excluded_paths: set[str] = set()
 
     def authorization_headers(self, *, force_refresh: bool = False) -> dict[str, str]:
         """Build the required headers without persisting them on the session."""
@@ -345,6 +393,38 @@ class DataPortalClient:
                 "Configured VIN is not authorized for the Data Portal account"
             )
 
+    def get_endpoint(self, endpoint: Endpoint, vin: str) -> dict[str, Any]:
+        """Read one catalog operation using the existing authorized transport."""
+
+        response = self._authorized_get(endpoint.request_path(vin), "Vehicle endpoint")
+        try:
+            payload = response.json()
+        except ValueError:
+            raise DataPortalResponseError("Vehicle endpoint returned invalid JSON") from None
+        if not isinstance(payload, dict):
+            raise DataPortalResponseError("Vehicle endpoint returned a non-object response")
+        return payload
+
+    def get_catalog(
+        self, catalog: tuple[Endpoint, ...], vin: str,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+        """Read every endpoint, keeping successful responses and safe error types."""
+
+        responses = {}
+        failures = {}
+        for endpoint in catalog:
+            try:
+                responses[endpoint.path_template] = self.get_endpoint(endpoint, vin)
+            except (DataPortalRequestError, DataPortalResponseError, TokenProviderError) as error:
+                if not isinstance(error, DataPortalRequestError) or error.status_code is None:
+                    if not isinstance(error, DataPortalEndpointExcludedError):
+                        logger.warning(
+                            "Data Portal endpoint %s failed (%s)", endpoint.topic_root,
+                            type(error).__name__,
+                        )
+                failures[endpoint.path_template] = type(error).__name__
+        return responses, failures
+
     def get_battery(self, vin: str) -> dict[str, Any]:
         """Fetch the official Battery telemetry response for one vehicle."""
 
@@ -367,10 +447,12 @@ class DataPortalClient:
             raise DataPortalResponseError(
                 "Battery endpoint returned no valid data object"
             )
-        self._validate_response_vin(payload, normalized_vin)
+        self.validate_response_vin(payload, normalized_vin)
         return payload
 
     def _authorized_get(self, path: str, endpoint_name: str) -> requests.Response:
+        if path in self._excluded_paths:
+            raise DataPortalEndpointExcludedError("Endpoint excluded for this run")
         transient_retries = 0
         token_refreshed = False
 
@@ -396,6 +478,14 @@ class DataPortalClient:
 
             if response.status_code == 200:
                 return response
+            _, message = _error_details(response)
+            if (
+                response.status_code >= 400
+                and re.match(r"/v1/vehicles/[^/]+/(telemetry|charging)/", path)
+                and NO_VEHICLE_DATA_PATTERN.search(message)
+            ):
+                self._excluded_paths.add(path)
+                self._raise_for_status(response.status_code, endpoint_name)
             if response.status_code == 401 and not token_refreshed:
                 token_refreshed = True
                 continue
@@ -460,7 +550,7 @@ class DataPortalClient:
         )
 
     @staticmethod
-    def _validate_response_vin(
+    def validate_response_vin(
         battery_response: dict[str, Any],
         expected_vin: str,
     ) -> None:

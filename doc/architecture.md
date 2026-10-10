@@ -39,8 +39,17 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
 
 ## Grenzen der OpenAPI-Steuerung
 - Alle erlaubten GET-Endpunkte des Katalogs werden berücksichtigt, einschließlich
-  Location. Es gibt keine optionale Endpunktauswahl oder Ausschlussliste;
-  Modellhinweise deaktivieren keine Endpunkte.
+  Location. Es gibt keine konfigurierbare Endpunktauswahl; Modellhinweise
+  deaktivieren keine Endpunkte. Antwortet die API mit einer Fehlermeldung passend
+  zu `No .* data is available for this vehicle`, wird der betroffene Fahrzeugpfad
+  im Speicher des laufenden API-Clients ausgeschlossen. Weitere Abrufe und Retries
+  dieses Pfads entfallen; ein neuer Prozess startet mit leerer Ausschlussliste.
+  Der spätere Polling-Ablauf muss dieselbe Client-Instanz über seine Zyklen halten.
+- Jeder HTTP-Fehlerbody wird ausgewertet und als `httpstatus / code: message`
+  auf der Konsole protokolliert, auch vor Token-Erneuerung oder temporären Retries.
+  Der tatsächliche HTTP-Status ist maßgeblich. Ungültige Bodies erhalten
+  `HTTP_ERROR: No valid API error message`; VINs und bekannte Zugangsdaten werden
+  redigiert. Bereits ausgeschlossene Pfade verursachen keine neue HTTP-Meldung.
 - `POLESTAR_API_BASE_URL` wird in Konfiguration und HTTP-Client als HTTPS-URL
   mit Host und gültigem optionalem Port geprüft. Eingebettete Zugangsdaten,
   Query, Fragment, Whitespace und Backslashes sind unzulässig; Fehlermeldungen
@@ -56,8 +65,28 @@ Das Projekt verbindet die Polestar-Cloud-API mit einem lokalen MQTT-Broker.
   abgelehnt. Pfad-/Operationsreferenzen werden nicht aufgelöst und sind unzulässig.
   `/token`, `/v1/vehicles` und `x-`-Metadaten bleiben außerhalb des Katalogs;
   Schreiboperationen werden ausgeschlossen, unbekannte Pfade abgelehnt.
-  Der Katalog liefert bereits die Scopes für den Token-Abruf. Die generische
-  Abrufschleife folgt im nächsten M5B-Schritt.
+  Der Katalog liefert die Scopes für den Token-Abruf und wird im
+  Data-Portal-Einmallauf sequenziell über `get_catalog()` abgearbeitet.
+- `get_endpoint()` ruft jedes Pfadtemplate über den bestehenden autorisierten
+  GET-Transport ab (Timeouts, Token-Erneuerung und Retry unverändert) und verlangt
+  eine JSON-Objektantwort. `get_catalog()` hält Antworten nach Pfadtemplate vor.
+  API-/Antwort-/Tokenfehler werden getrennt nach Pfadtemplate mit ihrem sicheren
+  Exception-Typ erfasst; erfolgreiche Antworten bleiben verfügbar. Ein fehlerhafter
+  Endpunkt blockiert weder nachfolgende Abrufe noch eine gültige Battery-Ausgabe.
+  MQTT erhält alle erfolgreichen Antworten unter `<base>` plus `topic_root`,
+  einschließlich `data` und `meta`. Battery wird zusätzlich auf SoC, VIN und
+  Zeitstempel geprüft; bei Fehlern werden nur ihre Ausgabe und ihr Mapping
+  ausgelassen. Der dauerhafte Polling-Ablauf bleibt M7 vorbehalten.
+- Der Einmallauf meldet bei bestätigter Veröffentlichung und Fehlern anderer
+  Endpunkte `data_portal: partial` und `failed_endpoints`, Exit-Code 0. Sind keine
+  publizierbaren Daten vorhanden, endet er vor MQTT mit Exit-Code 1; das bisherige
+  Topic-Inventar bleibt unverändert. Retained-Bereinigung erfolgt weiterhin nicht.
+  Das Inventar enthält nach vollständig bestätigter Veröffentlichung die Topics
+  dieses Durchlaufs; eine endpunktbezogene Inventarfortschreibung bleibt M6.2.
+- Alle dynamischen Topic-Namen und Kollisionen zwischen Endpunkten sowie mit
+  Mapping-Zielen werden vor der MQTT-Verbindung geprüft. Die bestehende CSV mit
+  Quellen wie `data.batteryChargeLevelPercentage` bezieht sich weiterhin auf
+  Battery; sie wird nicht mehrfach auf andere Endpunktantworten angewendet.
 - Katalogeinträge sind unveränderliche `Endpoint`-Objekte mit `path_template`,
   `topic_root` (z. B. `/telemetry/battery`), `required_scopes`, `description`
   und optionalen `supported_models`. Die Topic-Wurzel enthält weder MQTT-Basis

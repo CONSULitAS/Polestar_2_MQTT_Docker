@@ -84,6 +84,30 @@ Bereinigung retained gespeicherter Topics werden in separaten Schritten ergänzt
 
 ## Data-Portal-Mapping: JSON-Pfad zu zusätzlichem MQTT-Topic
 
+HTTP-Fehler erscheinen als `httpstatus / code: message`, beispielsweise
+`404 / DATA_NOT_AVAILABLE: No is-at-charge-location data is available for this vehicle.`.
+Eine Meldung passend zu `No .* data is available for this vehicle` schließt den
+aktuellen Endpunkt im laufenden API-Client aus, ohne weitere Retries oder Abrufe.
+Der Ausschluss bleibt ausschließlich im Speicher und wird beim nächsten
+Programmstart zurückgesetzt. Andere Fehler führen nicht zu diesem Ausschluss.
+
+Für eine temporäre vollständige Antwortdiagnose steht
+`./run_local.sh debug-DataPortalAPI` zur Verfügung. Der Modus ruft Fahrzeugliste
+und alle Katalogendpunkte ab, gibt HTTP-Status und Antwortbody aus und schreibt
+denselben Bericht in eine temporäre JSON-Datei (Pfad am Ausgabeende). VIN und
+Zugangsdaten werden redigiert; Telemetrie einschließlich Standort bleibt sichtbar.
+Token-Antworten und Header werden nicht ausgegeben. Keine MQTT-Veröffentlichung
+oder Inventaränderung; der Modus wird ausschließlich explizit gestartet.
+
+Der Data-Portal-Einmallauf publiziert alle erfolgreichen Katalogantworten unter
+`<MQTT_BASE_TOPIC>/telemetry/...` beziehungsweise `<MQTT_BASE_TOPIC>/charging/...`.
+`data`, `meta`, Arrays und neue skalare Felder bleiben im dynamischen Baum erhalten.
+Die bestehende CSV-Zuordnung bezieht sich weiterhin ausschließlich auf die
+Battery-Antwort. Fehlgeschlagene Endpunkte werden ausgelassen; auch eine ungültige
+Battery-Antwort blockiert andere erfolgreiche Ausgaben nicht. Teilbetrieb erscheint
+als `data_portal: partial` mit Fehleranzahl. Ohne publizierbare Daten endet der
+Einmallauf mit Exit-Code 1. Retained-Werte werden in diesem Schritt nicht gelöscht.
+
 Die optionale Vorlage [`mqtt_topic_mapping.csv_sample`](../local-files/mqtt_topic_mapping.csv_sample)
 enthält SoC, Ladestatus, geschätzte Restladezeit in Minuten und geschätzte
 Restreichweite in Kilometern. Sie wird nicht automatisch geladen. Zur Aktivierung

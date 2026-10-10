@@ -24,6 +24,7 @@ def auth_client():
 # tests for auth flow helpers
 
 
+# PKCE-Challenge und Verifier müssen dasselbe Anmeldeverfahren absichern.
 def test_generate_code_verifier_and_challenge_returns_matching_pair():
     code_verifier, code_challenge = PolestarAuthClient._generate_code_verifier_and_challenge()
 
@@ -36,6 +37,7 @@ def test_generate_code_verifier_and_challenge_returns_matching_pair():
     assert code_challenge == expected_challenge
 
 
+# Der Login übernimmt Formularziel und Sitzungscookie aus der Anmeldeseite.
 def test_get_path_token_extracts_values(auth_client, monkeypatch, make_response):
     captured = {}
 
@@ -64,6 +66,7 @@ def test_get_path_token_extracts_values(auth_client, monkeypatch, make_response)
     assert "code_challenge=fixed-challenge" in captured["url"]
 
 
+# Ohne Sitzungscookie darf die Anmeldung nicht fortgesetzt werden.
 def test_get_path_token_raises_when_cookie_missing(auth_client, monkeypatch, make_response):
     monkeypatch.setattr(
         auth.requests,
@@ -75,6 +78,7 @@ def test_get_path_token_raises_when_cookie_missing(auth_client, monkeypatch, mak
         auth_client.get_path_token()
 
 
+# Ein fehlendes Formularziel wird als ungültige Anmeldeseite gemeldet.
 def test_get_path_token_raises_when_action_marker_missing(auth_client, monkeypatch, make_response):
     monkeypatch.setattr(
         auth.requests,
@@ -93,6 +97,7 @@ def test_get_path_token_raises_when_action_marker_missing(auth_client, monkeypat
 # tests for credential login flow
 
 
+# Nach erfolgreicher Anmeldung wird der Autorisierungscode übernommen.
 def test_perform_login_returns_code_from_redirect(auth_client, monkeypatch, make_response):
     def fake_post(url, headers=None, data=None, allow_redirects=False):
         return make_response(
@@ -110,6 +115,7 @@ def test_perform_login_returns_code_from_redirect(auth_client, monkeypatch, make
     assert code == "auth-code-123"
 
 
+# Ein Login ohne Weiterleitungsziel liefert keinen Autorisierungscode.
 def test_perform_login_raises_when_location_header_missing(auth_client, monkeypatch, make_response):
     monkeypatch.setattr(
         auth.requests,
@@ -124,6 +130,7 @@ def test_perform_login_raises_when_location_header_missing(auth_client, monkeypa
         auth_client.perform_login("user@example.com", "secret", "path-token", "cookie=value")
 
 
+# Eine vorgeschaltete UID-Weiterleitung wird bis zum Autorisierungscode verfolgt.
 def test_perform_login_retries_when_uid_is_returned_first(auth_client, monkeypatch, make_response):
     responses = iter(
         [
@@ -149,6 +156,7 @@ def test_perform_login_retries_when_uid_is_returned_first(auth_client, monkeypat
     assert code == "follow-up-code"
 
 
+# Eine unvollständige UID-Weiterleitung beendet den Login mit einem Fehler.
 def test_perform_login_raises_when_follow_up_location_missing(
     auth_client,
     monkeypatch,
@@ -177,6 +185,7 @@ def test_perform_login_raises_when_follow_up_location_missing(
 # tests for token endpoints
 
 
+# Der Tokenabruf liefert Zugriffs- und Refresh-Token samt Ablaufzeit.
 def test_get_api_token_returns_tokens_and_expiry(auth_client, monkeypatch, make_response):
     before_call = datetime.now()
 
@@ -204,6 +213,7 @@ def test_get_api_token_returns_tokens_and_expiry(auth_client, monkeypatch, make_
     )
 
 
+# Eine Fehlerantwort darf nicht als erfolgreicher Tokenabruf gelten.
 def test_get_api_token_raises_for_error_payload(auth_client, monkeypatch, make_response):
     monkeypatch.setattr(
         auth.requests,
@@ -221,6 +231,7 @@ def test_get_api_token_raises_for_error_payload(auth_client, monkeypatch, make_r
 # tests for token lifecycle handling
 
 
+# Ein noch ausreichend gültiges Token wird ohne erneute Anmeldung verwendet.
 def test_ensure_valid_token_returns_existing_token_when_not_expiring(auth_client):
     expiry_time = datetime.now() + timedelta(minutes=10)
 
@@ -231,6 +242,7 @@ def test_ensure_valid_token_returns_existing_token_when_not_expiring(auth_client
     assert result == ("current-token", expiry_time, "refresh-token")
 
 
+# Zur Token-Erneuerung wird zuerst der vorhandene Refresh-Token verwendet.
 def test_ensure_valid_token_uses_refresh_token_first(auth_client, monkeypatch):
     refreshed = ("new-token", datetime.now() + timedelta(minutes=30), "new-refresh")
     monkeypatch.setattr(auth_client, "refresh_access_token", lambda refresh_token: refreshed)
@@ -246,6 +258,7 @@ def test_ensure_valid_token_uses_refresh_token_first(auth_client, monkeypatch):
     assert result == refreshed
 
 
+# Scheitert der Refresh, wird eine vollständige Anmeldung versucht.
 def test_ensure_valid_token_falls_back_to_full_login_when_refresh_fails(auth_client, monkeypatch):
     fresh_login = ("fresh-token", datetime.now() + timedelta(minutes=30), "fresh-refresh")
 

@@ -22,6 +22,7 @@ def set_valid_environment(monkeypatch) -> None:
         monkeypatch.setenv(name, value)
 
 
+# Der Auth-only-Check zeigt ausschließlich sichere Metadaten zum erhaltenen Token.
 def test_auth_check_prints_only_safe_metadata(
     monkeypatch,
     capsys,
@@ -45,6 +46,7 @@ def test_auth_check_prints_only_safe_metadata(
     assert "client-secret" not in output
 
 
+# Fehlende Pflichtkonfiguration beendet den Auth-only-Check mit Fehlerstatus.
 def test_auth_check_returns_nonzero_for_missing_configuration(
     monkeypatch,
     capsys,
@@ -62,6 +64,7 @@ def test_auth_check_returns_nonzero_for_missing_configuration(
     assert "configuration error" in capsys.readouterr().out
 
 
+# Ein fehlgeschlagener Auth-only-Check meldet Fehler, ohne das Secret auszugeben.
 def test_auth_check_returns_nonzero_without_leaking_secret(
     monkeypatch,
     capsys,

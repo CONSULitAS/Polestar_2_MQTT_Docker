@@ -29,6 +29,7 @@ NOW = datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
         (timedelta(seconds=-1), 0),
     ],
 )
+# Die Secret-Restlaufzeit zählt volle Tage und wird nach Ablauf nicht negativ.
 def test_calculates_non_negative_full_days(
     remaining: timedelta,
     expected_days: int,
@@ -49,6 +50,7 @@ def test_calculates_non_negative_full_days(
         (timedelta(seconds=-1), CredentialStatus.EXPIRED),
     ],
 )
+# Die Restlaufzeit ordnet auch an Grenzwerten den richtigen Credential-Status zu.
 def test_classifies_every_status_boundary(
     remaining: timedelta,
     expected_status: CredentialStatus,
@@ -57,6 +59,7 @@ def test_classifies_every_status_boundary(
 
 
 @pytest.mark.parametrize("days", sorted(WARNING_DAYS))
+# Jede konfigurierte Tagesschwelle erzeugt die vorgesehene Ablaufwarnung.
 def test_creates_warning_at_every_day_threshold(days: int) -> None:
     expiry = NOW + (timedelta(hours=12) if days == 0 else timedelta(days=days))
 
@@ -68,10 +71,12 @@ def test_creates_warning_at_every_day_threshold(days: int) -> None:
 
 
 @pytest.mark.parametrize("days", [31, 29, 15, 13, 8, 6, 2])
+# Zwischen den festgelegten Tagesschwellen entstehen keine zusätzlichen Warnungen.
 def test_does_not_warn_outside_day_thresholds(days: int) -> None:
     assert credential_expiry_warning(NOW + timedelta(days=days), now=NOW) is None
 
 
+# Bei null vollen Resttagen wird zwischen bald ablaufendem und abgelaufenem Secret getrennt.
 def test_distinguishes_critical_and_expired_zero_day_warnings() -> None:
     critical = credential_expiry_warning(NOW + timedelta(seconds=1), now=NOW)
     expired = credential_expiry_warning(NOW - timedelta(seconds=1), now=NOW)
@@ -80,6 +85,7 @@ def test_distinguishes_critical_and_expired_zero_day_warnings() -> None:
     assert expired is not None and expired.status is CredentialStatus.EXPIRED
 
 
+# Jede Warnschwelle wird pro Ablaufdatum innerhalb der Laufzeit nur einmal ausgegeben.
 def test_emits_each_threshold_once_per_expiry() -> None:
     expires_at = NOW + timedelta(days=30)
     monitor = CredentialExpiryMonitor()
@@ -95,6 +101,7 @@ def test_emits_each_threshold_once_per_expiry() -> None:
     assert monitor.next_warning(expires_at, now=at_fourteen_days) is None
 
 
+# Ein geändertes Ablaufdatum erhält eine eigene Warnhistorie.
 def test_new_expiry_has_independent_warning_thresholds() -> None:
     monitor = CredentialExpiryMonitor()
     first_expiry = NOW + timedelta(days=30)
@@ -104,6 +111,7 @@ def test_new_expiry_has_independent_warning_thresholds() -> None:
     assert monitor.next_warning(rotated_expiry, now=NOW) is not None
 
 
+# Der Credential-Status wird beim Start und nach 24 Stunden erneut geprüft.
 def test_checks_at_start_and_after_twenty_four_hours() -> None:
     expires_at = NOW + timedelta(days=30)
     monitor = CredentialExpiryMonitor()
@@ -119,6 +127,7 @@ def test_checks_at_start_and_after_twenty_four_hours() -> None:
     assert daily.warning is None
 
 
+# Ein geändertes Ablaufdatum wird ohne Warten auf die tägliche Prüfung ausgewertet.
 def test_checks_rotated_expiry_immediately() -> None:
     monitor = CredentialExpiryMonitor()
     first_expiry = NOW + timedelta(days=30)
@@ -131,6 +140,7 @@ def test_checks_rotated_expiry_immediately() -> None:
 
 
 @pytest.mark.parametrize("argument", ["expires_at", "now"])
+# Ablaufberechnungen lehnen Zeitpunkte ohne eindeutige Zeitzone ab.
 def test_rejects_naive_timestamps(argument: str) -> None:
     expires_at = NOW + timedelta(days=30)
     now = NOW

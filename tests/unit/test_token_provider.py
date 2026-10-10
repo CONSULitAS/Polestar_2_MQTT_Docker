@@ -39,6 +39,7 @@ def make_provider(clock: FakeClock) -> TokenProvider:
     )
 
 
+# Client-Credentials liefern ein validiertes Bearer-Token mit berechneter Ablaufzeit.
 def test_requests_and_validates_json_token(
     requests_mock: requests_mock_module.Mocker,
 ) -> None:
@@ -65,6 +66,7 @@ def test_requests_and_validates_json_token(
     )
 
 
+# Ein Token wird bis zur Sicherheitsmarge wiederverwendet und dann ersetzt.
 def test_reuses_token_until_expiry_margin(
     requests_mock: requests_mock_module.Mocker,
 ) -> None:
@@ -86,6 +88,7 @@ def test_reuses_token_until_expiry_margin(
     assert requests_mock.call_count == 2
 
 
+# Eine erzwungene Erneuerung ersetzt auch ein noch gültiges Token.
 def test_force_refresh_requests_new_token(
     requests_mock: requests_mock_module.Mocker,
 ) -> None:
@@ -101,6 +104,7 @@ def test_force_refresh_requests_new_token(
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 500, 502, 503])
+# Token-HTTP-Fehler behalten ihren Status, geben aber das Client Secret nicht preis.
 def test_maps_http_errors_to_redacted_exception(
     requests_mock: requests_mock_module.Mocker,
     status_code: int,
@@ -131,6 +135,7 @@ def test_maps_http_errors_to_redacted_exception(
         ["not", "an", "object"],
     ],
 )
+# Eine erfolgreiche HTTP-Antwort ohne gültige Token-Daten wird abgelehnt.
 def test_rejects_invalid_success_response(
     requests_mock: requests_mock_module.Mocker,
     response: object,
@@ -141,6 +146,7 @@ def test_rejects_invalid_success_response(
         make_provider(FakeClock()).get_token()
 
 
+# Ungültiges JSON der Token-Antwort wird als Antwortfehler gemeldet.
 def test_rejects_invalid_json(requests_mock: requests_mock_module.Mocker) -> None:
     requests_mock.post(TOKEN_URL, text="not-json")
 
@@ -148,6 +154,7 @@ def test_rejects_invalid_json(requests_mock: requests_mock_module.Mocker) -> Non
         make_provider(FakeClock()).get_token()
 
 
+# Ein Timeout beim Tokenabruf darf das Client Secret nicht offenlegen.
 def test_maps_timeout_without_leaking_secret(
     requests_mock: requests_mock_module.Mocker,
 ) -> None:
@@ -163,6 +170,7 @@ def test_maps_timeout_without_leaking_secret(
     assert "[REDACTED]" in str(exception.value)
 
 
+# Die Darstellung des Token-Objekts enthält keinen Access Token.
 def test_token_repr_does_not_contain_access_token(
     requests_mock: requests_mock_module.Mocker,
 ) -> None:
@@ -177,6 +185,7 @@ def test_token_repr_does_not_contain_access_token(
     assert "access-token-value" not in repr(token)
 
 
+# Cache, Ablauf und erzwungene Erneuerung verwenden denselben Scope-Satz.
 def test_scope_snapshot_survives_cache_expiry_and_forced_renewal(requests_mock):
     requests_mock.post(TOKEN_URL, json={
         "accessToken": "fixture-token", "expiresIn": 3600, "tokenType": "Bearer",

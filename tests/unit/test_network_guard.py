@@ -7,6 +7,7 @@ import socket
 import pytest
 
 
+# Unit-Tests dürfen keine echten Netzwerkverbindungen aufbauen.
 def test_network_connections_are_blocked() -> None:
     with pytest.raises(RuntimeError, match="Network access is disabled"):
         socket.create_connection(("example.com", 443))

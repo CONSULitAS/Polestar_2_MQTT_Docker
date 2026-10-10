@@ -8,6 +8,7 @@ import pytest
 from polestar_mqtt.topic_inventory import TopicInventoryError, save_topic_inventory
 
 
+# Das Inventar speichert eindeutige, sortierte Topics und ersetzt den bisherigen Stand.
 def test_saves_unique_sorted_topics_and_replaces_previous_set(tmp_path):
     path = tmp_path / "state.json"
     save_topic_inventory(path, ["z/soc", "a/charging", "z/soc"])
@@ -19,6 +20,7 @@ def test_saves_unique_sorted_topics_and_replaces_previous_set(tmp_path):
     assert list(tmp_path.iterdir()) == [path]
 
 
+# Ein fehlgeschlagener Dateiaustausch erhält das alte Inventar und maskiert Fehlerdetails.
 def test_failed_replace_preserves_previous_file_and_redacts_error(tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     path.write_text("previous")

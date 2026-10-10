@@ -282,10 +282,82 @@ Metadaten; der Client arbeitet daraus einen validierten Endpoint-Katalog ab.
 berücksichtigen, einschließlich Location. Die zuvor geplante optionale
 Endpunktauswahl/Ausschlussliste entfällt; `POLESTAR_API_ENDPOINTS` wird nicht
 eingeführt. Modellhinweise bewirken keinen automatischen Ausschluss.
-- [ ] Einen generischen GET-Abruf implementieren und den Endpoint-Katalog pro Polling-Zyklus sequenziell abarbeiten, ohne pro dokumentiertem Endpunkt eine eigene Client-Methode anzulegen.
-- [ ] Erfolgreiche Antworten je Endpunkt unter einer aus dem Pfad abgeleiteten Wurzel publizierbar machen, beispielsweise `/telemetry/battery` unter `<base>/telemetry/battery`; `data` und `meta` bleiben Bestandteil des dynamischen Baums.
+Die spätere Präzisierung erlaubt ausschließlich einen dynamischen Ausschluss
+während der aktuellen Client-/Prozesslaufzeit aufgrund einer API-Fehlermeldung
+passend zu `No .* data is available for this vehicle`; kein persistentes Mapping.
+- [x] Einen generischen GET-Abruf implementieren und den Endpoint-Katalog pro Polling-Zyklus sequenziell abarbeiten, ohne pro dokumentiertem Endpunkt eine eigene Client-Methode anzulegen.
+  - 2026-10-10: Lokale Abnahme nach Fehlerisolation erfolgreich: alle
+    Katalogeinträge abgerufen; `/charging/is-at-charge-location` weiterhin 404,
+    gültige Battery-Antwort dennoch per MQTT bestätigt. Einmallauf meldet
+    `partial` mit einem fehlgeschlagenen Endpunkt, Exit-Code 0. Ruff und
+    364 Tests über `./run_tests.sh` erfolgreich. Dauerhaftes Polling bleibt M7.
+  - 2026-10-10: Fehler eingegrenzt: Der erneute lokale Data-Portal-Lauf meldet
+    ausschließlich für `/charging/is-at-charge-location` HTTP 404. Die übrigen
+    Katalogabrufe lieferten JSON-Objekte; das ist noch keine fachliche Validierung
+    aller Antworten. Die API-Ursache des 404 ist nicht abschließend geklärt.
+    Die aktuelle Weitergabe des ersten Fehlers verhindert danach auch die
+    Battery-Veröffentlichung. Sichere Diagnose für Endpunkt, Exception-Typ und
+    HTTP-Status ergänzt; keine VIN, Tokens oder Antwortdaten ausgegeben.
+    `./run_tests.sh`: Ruff und 360 Tests erfolgreich, Exit-Code 0. Lokaler
+    Data-Portal-Lauf weiterhin Exit-Code 1. Der synthetische neue Endpunkt im
+    Unit-Test wird vollständig von `requests_mock` beantwortet; Netzwerkzugriffe
+    sind dort gesperrt. Die Test-VIN hat keinen Bezug zum Live-404.
+  - 2026-10-10: `get_endpoint()` und `get_catalog()` implementiert und im
+    Data-Portal-Einmallauf eingebunden. Alle Katalogeinträge werden sequenziell
+    über den bestehenden autorisierten Transport abgerufen. Antworten bleiben
+    nach Pfadtemplate zugeordnet. Bei API-/Antwort-/Tokenfehlern werden die
+    übrigen Endpunkte noch abgerufen, danach wird der erste Fehler gemeldet.
+    Veröffentlichung von Teilerfolgen und generische MQTT-Ausgabe bleiben
+    separate Schritte; der dauerhafte Polling-Ablauf folgt in M7.
+    `./run_tests.sh`: Ruff, 360 Tests und Legacy-Einmallauf erfolgreich,
+    Exit-Code 0. `./run_local.sh runonce-DataPortalAPI`: Katalogdurchlauf beendet,
+    danach `DataPortalNotFoundError` (API-404), Exit-Code 1; MQTT nicht erreicht.
+    Keine erfolgreiche Live-Abnahme; Checkbox bleibt vorerst offen. Kein
+    Container-Build und keine Fahrzeugdaten im Nachweis gespeichert.
+- [x] Erfolgreiche Antworten je Endpunkt unter einer aus dem Pfad abgeleiteten Wurzel publizierbar machen, beispielsweise `/telemetry/battery` unter `<base>/telemetry/battery`; `data` und `meta` bleiben Bestandteil des dynamischen Baums.
+  - 2026-10-10: Generische Veröffentlichung aller erfolgreichen Katalogantworten
+    mit QoS 1, Retain und bestätigter Zustellung implementiert. Topic-Namen und
+    Kollisionen zwischen Endpunkten bzw. mit Mapping-Zielen werden vor MQTT
+    geprüft. Bestehendes CSV-Mapping bleibt auf Battery bezogen. Ungültige
+    Battery-Antworten werden ausgelassen und blockieren andere Ausgaben nicht.
+    Ohne publizierbare Daten Exit-Code 1; sonst bei Endpunktfehlern `partial`.
+    `./run_tests.sh`: Ruff, 367 Tests und Legacy-Einmallauf erfolgreich,
+    Exit-Code 0. `./run_local.sh runonce-DataPortalAPI`: 243 Topics bestätigt,
+    ein Endpunkt mit HTTP 404, Teilbetrieb erfolgreich, Exit-Code 0.
+    Endpunktbezogenes Inventar und Retained-Bereinigung bleiben M6.2 vorbehalten.
 - [ ] Fehler je Endpunkt isolieren: Ein nicht unterstützter oder vorübergehend fehlerhafter Endpunkt darf andere Endpunkte desselben Zyklus nicht blockieren. Retained-Bereinigung nur für einen fachlich erfolgreich und gültig verarbeiteten Endpunkt ausführen.
+  - 2026-10-10: Abruffehler werden getrennt von erfolgreichen Antworten
+    zurückgegeben und verhindern keine gültige Battery-Veröffentlichung mehr.
+    Teilbetrieb wird ausdrücklich als `partial` samt Fehleranzahl gemeldet.
+    Fehlende/ungültige Battery-Daten verhindern MQTT und Inventaränderungen.
+    Tests für 404, 403, ungültiges JSON und fehlgeschlagenen Battery-Abruf;
+    `./run_tests.sh`: Ruff, 364 Tests und Legacy-Einmallauf erfolgreich,
+    Exit-Code 0. `./run_local.sh runonce-DataPortalAPI`: Teilbetrieb mit
+    bestätigtem MQTT-Publish, Exit-Code 0. Generische Veröffentlichung und
+    endpunktbezogene Retained-Bereinigung bleiben offen; daher ist die gesamte
+    Checkbox noch nicht abgeschlossen.
 - [ ] `404 DATA_NOT_AVAILABLE`, modellabhängig nicht unterstützte Endpunkte und temporäre Transport-/Serverfehler getrennt behandeln; `x-supported-models` nur als Hinweis verwenden, solange das Fahrzeugmodell nicht verlässlich bekannt ist.
+  - 2026-10-10: Jeder HTTP-Fehlerbody wird ausgewertet und redigiert als
+    `httpstatus / code: message` ausgegeben, einschließlich Retry-Antworten und
+    OAuth-Fehlern. Meldungen passend zu `No .* data is available for this vehicle`
+    schließen ausschließlich den betroffenen Fahrzeugpfad im laufenden Client
+    aus, unabhängig vom Fehlercode; weitere Requests und Retries entfallen.
+    Kein persistenter Ausschluss und keine konfigurierbare Endpunktauswahl.
+    Ein neuer Prozess versucht wieder alle Endpunkte. `./run_tests.sh`: Ruff,
+    376 Tests und Legacy-Einmallauf erfolgreich, Exit-Code 0. Lokaler
+    Data-Portal-Lauf zeigt den vollständigen redigierten 404-Text und bestätigt
+    MQTT im Teilbetrieb, Exit-Code 0. Wiederholte Katalogdurchläufe, neue
+    Client-Instanz, nicht passende Meldungen und Redigierung sind unit-getestet.
+    Weitere fachliche Unterscheidungen bleiben offen.
+  - 2026-10-10: Mit temporärem Diagnosemodus
+    `./run_local.sh debug-DataPortalAPI` bestätigt: Der 404 von
+    `/charging/is-at-charge-location` enthält `error.code: DATA_NOT_AVAILABLE`
+    und meldet, dass für dieses Fahrzeug keine entsprechenden Daten vorliegen.
+    Eine genauere Ursache ist nicht angegeben. Die übrigen 14 Fahrzeugendpunkte
+    und die Fahrzeugliste antworteten mit HTTP 200. Vollständige redigierte
+    Antworten nur lokal in temporärer Datei; keine echten Fahrzeugdaten im
+    Repository. `./run_tests.sh`: Ruff und 368 Tests erfolgreich, Exit-Code 0.
+    Die fachliche Unterscheidung im regulären Fehlerpfad bleibt offen.
 - [ ] Battery-SoC als besondere fachliche Ableitung für Validierung, openWB und Kompatibilitäts-Mapping beibehalten, obwohl Transport und dynamische MQTT-Ausgabe generisch werden.
 - [ ] Unit-Tests mit veränderten synthetischen OpenAPI-Dateien ergänzen: neuer kompatibler GET-Endpunkt ohne Codeänderung, ungültige beziehungsweise gefährliche Pfade, Scope-Aggregation über den vollständigen Katalog und isolierte Teilfehler.
 - [ ] Einen lokalen und anschließend containerisierten Live-QS-Lauf über den generischen Katalog durchführen; aufgerufene Endpunktnamen und Ergebnisse dokumentieren, aber keine VIN, Position, Tokens oder vollständigen Fahrzeugdaten speichern.

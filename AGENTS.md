@@ -41,7 +41,7 @@ Dieses Repository betreibt einen Docker-basierten Gateway zwischen der Polestar 
 - Keine großflächigen Style- oder Format-Rewrites in funktionalen Änderungen, sofern nicht explizit beauftragt.
 - Kommentare in `src/` und `tests/` sollen den Stil der Hauptdatei aufgreifen: knappe Abschnittsblöcke und kurze Zweckkommentare, keine redundanten Inline-Erklärungen.
 - Kommentarregeln für `src/`: nur nicht offensichtliche Logik, Protokollbesonderheiten oder Fehlerpfade kommentieren; triviale Zuweisungen nicht kommentieren.
-- Kommentarregeln für `tests/`: bei komplexeren Fällen klare Struktur (z. B. Arrange/Act/Assert oder äquivalente Abschnittsblöcke), damit Testintention und Erwartung schnell erkennbar sind.
+- Kommentarregeln für `tests/`: vor jedem Test-`def` eine kurze fachliche Beschreibung als Kommentar; bei komplexeren Fällen zusätzlich klare Struktur (z. B. Arrange/Act/Assert oder äquivalente Abschnittsblöcke), damit Testintention und Erwartung schnell erkennbar sind.
 - Wenn Tests nicht ausgeführt werden können oder fehlschlagen, muss der KI-Agent dies transparent benennen und die Arbeit nicht als vollständig verifiziert darstellen.
 - API-/Login-Änderungen mit dem passenden lokalen Modus von `./run_local.sh` prüfen; ein erfolgreicher lokaler Lauf genügt für den einzelnen Umsetzungsschritt.
 - Container nur bei Docker-/Image-/Mount-spezifischen Änderungen oder ausdrücklich vorgesehenen Container-Abnahme-Gates bauen und prüfen. Kein routinemäßiger Container-Build nach jeder Codeänderung; ein entfallender Container-Test blockiert die lokale Abnahme nicht.

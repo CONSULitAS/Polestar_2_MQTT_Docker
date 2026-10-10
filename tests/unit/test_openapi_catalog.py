@@ -8,6 +8,7 @@ from polestar_mqtt.config import ConfigurationError
 from polestar_mqtt.openapi_catalog import BUNDLED_OPENAPI_FILE, select_openapi_file
 
 
+# Eine vorhandene lokale OpenAPI-Datei hat bei der Dateiauswahl Vorrang vor dem Bundle.
 def test_local_file_takes_precedence_without_parsing(tmp_path):
     local = tmp_path / "local.json"
     local.write_text("validation belongs to the loader", encoding="utf-8")
@@ -15,6 +16,7 @@ def test_local_file_takes_precedence_without_parsing(tmp_path):
     assert select_openapi_file(local, bundled_file=tmp_path / "missing.json") == local
 
 
+# Ohne lokale Datei wird das Bundle unabhängig vom Arbeitsverzeichnis gefunden.
 def test_missing_local_uses_bundle_independently_of_working_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
@@ -22,6 +24,7 @@ def test_missing_local_uses_bundle_independently_of_working_directory(tmp_path, 
     assert BUNDLED_OPENAPI_FILE.is_file()
 
 
+# Fehlen lokale Datei und Bundle, nennt die Fehlermeldung keine vertraulichen Pfade.
 def test_missing_sources_are_reported_without_paths(tmp_path):
     with pytest.raises(ConfigurationError, match="No local or bundled") as error:
         select_openapi_file(tmp_path / "private-local", bundled_file=tmp_path / "private-bundle")
@@ -30,12 +33,14 @@ def test_missing_sources_are_reported_without_paths(tmp_path):
 
 
 @pytest.mark.parametrize("invalid_source", ["local", "bundle"])
+# Verzeichnisse werden weder lokal noch im Bundle als OpenAPI-Dateien akzeptiert.
 def test_directory_is_not_a_source(tmp_path, invalid_source):
     local = tmp_path if invalid_source == "local" else tmp_path / "missing"
     with pytest.raises(ConfigurationError, match="regular file"):
         select_openapi_file(local, bundled_file=tmp_path)
 
 
+# Ein defekter lokaler Symlink darf nicht stillschweigend durch das Bundle ersetzt werden.
 def test_broken_local_symlink_does_not_silently_fall_back(tmp_path):
     local = tmp_path / "local.json"
     local.symlink_to(tmp_path / "missing")
@@ -44,6 +49,7 @@ def test_broken_local_symlink_does_not_silently_fall_back(tmp_path):
         select_openapi_file(local)
 
 
+# Ein Zugriffsfehler stoppt die Dateiauswahl ohne Fallback oder Pfadausgabe.
 def test_access_error_does_not_silently_fall_back_or_expose_path(tmp_path, monkeypatch):
     def denied(path):
         raise PermissionError("private-path")
@@ -56,6 +62,7 @@ def test_access_error_does_not_silently_fall_back_or_expose_path(tmp_path, monke
     assert error.value.__suppress_context__
 
 
+# Ein geladener OpenAPI-Stand bleibt trotz späterer Dateiänderung unverändert.
 def test_loader_reads_bundle_and_keeps_snapshot(tmp_path):
     import json
     from polestar_mqtt.openapi_catalog import load_openapi_document
@@ -74,6 +81,7 @@ def test_loader_reads_bundle_and_keeps_snapshot(tmp_path):
     b"{", b"\xff", b"[]", b'{"openapi":"3.1.0","openapi":"3.1.1"}',
     b'{"value":NaN}', b'{"value":Infinity}',
 ])
+# Ungültiges lokales JSON wird abgelehnt, statt auf das Bundle zurückzufallen.
 def test_loader_rejects_invalid_json_without_fallback(tmp_path, content):
     from polestar_mqtt.openapi_catalog import load_openapi_document
 
@@ -93,6 +101,7 @@ def test_loader_rejects_invalid_json_without_fallback(tmp_path, content):
     {"paths": {"/test": {"get": {"responses": {"200": []}}}}},
     {"components": []},
 ])
+# Nicht unterstützte OpenAPI-Versionen und fehlerhafte Grundstrukturen werden abgelehnt.
 def test_loader_rejects_invalid_structures(tmp_path, changes):
     import json
     from polestar_mqtt.openapi_catalog import load_openapi_document
@@ -105,6 +114,7 @@ def test_loader_rejects_invalid_structures(tmp_path, changes):
         load_openapi_document(local)
 
 
+# Lesefehler der OpenAPI-Datei werden ohne vertrauliche Pfadangaben gemeldet.
 def test_loader_redacts_read_errors(tmp_path, monkeypatch):
     from polestar_mqtt.openapi_catalog import load_openapi_document
 
@@ -118,6 +128,7 @@ def test_loader_redacts_read_errors(tmp_path, monkeypatch):
     assert error.value.__suppress_context__
 
 
+# Neue erlaubte GETs werden katalogisiert; Login, Fahrzeugliste und Schreibzugriffe nicht.
 def test_catalog_accepts_new_get_and_excludes_explicit_and_write_operations():
     from polestar_mqtt.openapi_catalog import build_endpoint_catalog
 
@@ -152,6 +163,7 @@ def test_catalog_accepts_new_get_and_excludes_explicit_and_write_operations():
     "/v1/vehicles/other/telemetry/battery",
     "/v1/vehicles/{vin}/commands/start",
 ])
+# Unbekannte oder unsichere Endpunktpfade werden ohne Wiedergabe des Pfads abgelehnt.
 def test_catalog_rejects_unknown_or_unsafe_paths_without_echoing_them(path):
     from polestar_mqtt.openapi_catalog import build_endpoint_catalog
 
@@ -164,6 +176,7 @@ def test_catalog_rejects_unknown_or_unsafe_paths_without_echoing_them(path):
     {"$ref": "https://example.invalid/paths.json"},
     {"get": {"$ref": "#/other"}}, {"get": None}, [],
 ])
+# Referenzierte oder fehlerhafte Operationen dürfen keine Katalogeinträge erzeugen.
 def test_catalog_rejects_indirect_or_invalid_operations(item):
     from polestar_mqtt.openapi_catalog import build_endpoint_catalog
 
@@ -171,6 +184,7 @@ def test_catalog_rejects_indirect_or_invalid_operations(item):
         build_endpoint_catalog({"paths": {"/v1/vehicles/{vin}/telemetry/battery": item}})
 
 
+# Das Bundle liefert genau die 15 fachlichen Fahrzeug-GETs ohne Login und Fahrzeugliste.
 def test_bundled_catalog_contains_only_fifteen_vehicle_gets(tmp_path):
     from polestar_mqtt.openapi_catalog import build_endpoint_catalog, load_openapi_document
 
@@ -191,6 +205,7 @@ def make_endpoint(**metadata):
     }})[0]
 
 
+# Katalogmetadaten bleiben unveränderlich und unabhängig vom ursprünglichen JSON.
 def test_metadata_is_copied_into_immutable_entry():
     from dataclasses import FrozenInstanceError
 
@@ -210,6 +225,7 @@ def test_metadata_is_copied_into_immutable_entry():
         entry.description = "changed"
 
 
+# Fehlende Modellhinweise sind zulässig; die Kurzbeschreibung ersetzt fehlende Langtexte.
 def test_optional_metadata_and_summary_fallback():
     assert make_endpoint().description == ""
     assert make_endpoint().supported_models is None
@@ -225,11 +241,13 @@ def test_optional_metadata_and_summary_fallback():
     {"x-supported-models": [""]}, {"x-supported-models": [2]},
     {"description": None}, {"summary": []},
 ])
+# Fehlerhafte Scopes, Modellhinweise und Beschreibungen verhindern die Katalogbildung.
 def test_invalid_metadata_is_rejected(metadata):
     with pytest.raises(ConfigurationError):
         make_endpoint(**metadata)
 
 
+# Ein fachlicher GET ohne erforderliche Scope-Angabe wird nicht katalogisiert.
 def test_missing_required_scopes_is_rejected():
     from polestar_mqtt.openapi_catalog import build_endpoint_catalog
 
@@ -239,6 +257,7 @@ def test_missing_required_scopes_is_rejected():
         }})
 
 
+# Eine gültige VIN wird normalisiert in das freigegebene Pfadtemplate eingesetzt.
 def test_request_path_normalizes_valid_vin():
     entry = make_endpoint()
     assert entry.request_path(" lpsvs000000000000 ") == (
@@ -250,6 +269,7 @@ def test_request_path_normalizes_valid_vin():
     None, "", "../outside", "LPSVS00000000000I", "LPSVS000000000000/extra",
     "LPSVS000000000000?x=y", "LPSVS000000000000%2f", "LPSVS000000000000\nother",
 ])
+# Ungültige VINs dürfen weder einen Request-Pfad bilden noch im Fehlertext erscheinen.
 def test_request_path_rejects_invalid_vin_without_echoing_it(vin):
     with pytest.raises(ConfigurationError) as error:
         make_endpoint().request_path(vin)
@@ -257,6 +277,7 @@ def test_request_path_rejects_invalid_vin_without_echoing_it(vin):
         assert vin not in str(error.value)
 
 
+# Auch manuell erzeugte Einträge dürfen die erlaubten Request-Pfade nicht umgehen.
 def test_request_path_rechecks_manually_constructed_template():
     from dataclasses import replace
 
@@ -265,6 +286,7 @@ def test_request_path_rechecks_manually_constructed_template():
         entry.request_path("LPSVS000000000000")
 
 
+# Das Bundle liefert Scopes, Kurzbeschreibung und Modellhinweise ohne Modellfilterung.
 def test_bundled_metadata_uses_summary_and_preserves_model_hints(tmp_path):
     from polestar_mqtt.openapi_catalog import build_endpoint_catalog, load_openapi_document
 
@@ -275,6 +297,7 @@ def test_bundled_metadata_uses_summary_and_preserves_model_hints(tmp_path):
     assert entry.description
 
 
+# Katalog-Scopes werden eindeutig sortiert und stammen nur aus den übergebenen Einträgen.
 def test_scope_aggregation_is_sorted_unique_and_uses_only_given_endpoints():
     from polestar_mqtt.openapi_catalog import aggregate_scopes
 
@@ -285,6 +308,7 @@ def test_scope_aggregation_is_sorted_unique_and_uses_only_given_endpoints():
     assert aggregate_scopes((second,)) == "test/a test/b"
 
 
+# Ein leerer Katalog darf keinen Tokenabruf mit ungewollten Standard-Scopes auslösen.
 def test_empty_catalog_does_not_request_implicit_default_scopes():
     from polestar_mqtt.openapi_catalog import aggregate_scopes
 

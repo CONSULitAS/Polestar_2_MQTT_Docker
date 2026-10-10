@@ -27,6 +27,7 @@ def valid_environment() -> dict[str, str]:
     }
 
 
+# Vollständige Zugangsdaten ergeben eine Konfiguration mit den Standardwerten.
 def test_loads_valid_configuration_with_defaults(
     valid_environment: dict[str, str],
 ) -> None:
@@ -58,6 +59,7 @@ def test_loads_valid_configuration_with_defaults(
 
 
 @pytest.mark.parametrize("value", ["", "   "])
+# Eine leere OpenAPI-Pfadangabe verwendet den vorgesehenen Standardpfad.
 def test_empty_openapi_path_uses_default(valid_environment, value):
     config = DataPortalConfig.from_environment(
         {**valid_environment, "POLESTAR_OPENAPI_FILE": value}
@@ -66,6 +68,7 @@ def test_empty_openapi_path_uses_default(valid_environment, value):
     assert config.openapi_file == DEFAULT_POLESTAR_OPENAPI_FILE
 
 
+# Explizite Laufzeitwerte ersetzen die jeweiligen Konfigurationsstandards.
 def test_loads_runtime_overrides(valid_environment: dict[str, str]) -> None:
     config = DataPortalConfig.from_environment(
         {
@@ -121,6 +124,7 @@ def test_loads_runtime_overrides(valid_environment: dict[str, str]) -> None:
         ("2026-06-15", "Europe/Berlin", "2026-06-14T22:00:00+00:00"),
     ],
 )
+# Das Ablaufdatum gilt ab lokaler Mitternacht und wird eindeutig nach UTC umgerechnet.
 def test_interprets_portal_expiry_as_midnight_in_configured_timezone(
     valid_environment: dict[str, str],
     portal_date: str,
@@ -138,6 +142,7 @@ def test_interprets_portal_expiry_as_midnight_in_configured_timezone(
     assert config.client_secret_expires_at.isoformat() == expected_utc
 
 
+# Fehlende Pflichtwerte werden gemeinsam und ohne geheime Werte gemeldet.
 def test_reports_all_missing_required_values_without_secrets() -> None:
     with pytest.raises(ConfigurationError) as exception:
         DataPortalConfig.from_environment(
@@ -174,6 +179,7 @@ def test_reports_all_missing_required_values_without_secrets() -> None:
         ({"TZ": "Invalid/Timezone"}, "TZ contains unknown timezone"),
     ],
 )
+# Ungültige VINs, Intervalle, Ablaufdaten und Zeitzonen verhindern den Start.
 def test_rejects_invalid_configuration(
     valid_environment: dict[str, str],
     changes: dict[str, str],
@@ -183,6 +189,7 @@ def test_rejects_invalid_configuration(
         DataPortalConfig.from_environment({**valid_environment, **changes})
 
 
+# Konfigurationsdarstellung und redigierte Texte dürfen keine Secrets enthalten.
 def test_redacts_secrets_from_repr_and_text(
     valid_environment: dict[str, str],
 ) -> None:
@@ -208,6 +215,7 @@ def test_redacts_secrets_from_repr_and_text(
     "https://example.invalid\\other/api", "https://example.invalid/a b",
     "https://example.invalid/\nprivate", "https://[invalid/api",
 ])
+# Unsichere API-Basis-URLs werden ohne Ausgabe des konfigurierten Werts abgelehnt.
 def test_rejects_unsafe_api_base_without_exposing_value(valid_environment, url):
     from polestar_mqtt.polestar_api import DataPortalHttpClient
 
@@ -219,6 +227,7 @@ def test_rejects_unsafe_api_base_without_exposing_value(valid_environment, url):
         DataPortalHttpClient(url)
 
 
+# Eine explizite HTTPS-Basis darf Host, Port und einen eigenen Pfad vorgeben.
 def test_api_base_accepts_explicit_https_host_port_and_path(valid_environment):
     config = DataPortalConfig.from_environment({
         **valid_environment, "POLESTAR_API_BASE_URL": "https://example.invalid:8443/custom/",

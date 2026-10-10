@@ -35,14 +35,14 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 fi
 
 if (( ${#APP_ARGS[@]} > 1 )); then
-    echo "Usage: ./run_local.sh [runonce|auth-check|runonce-DataPortalAPI|soc-check]" >&2
+    echo "Usage: ./run_local.sh [runonce|auth-check|runonce-DataPortalAPI|soc-check|debug-DataPortalAPI]" >&2
     exit 1
 fi
 
 RUN_MODE="${APP_ARGS[0]:-run}"
-if [[ "${RUN_MODE}" != "run" && "${RUN_MODE}" != "runonce" && "${RUN_MODE}" != "auth-check" && "${RUN_MODE}" != "soc-check" && "${RUN_MODE}" != "runonce-DataPortalAPI" ]]; then
+if [[ "${RUN_MODE}" != "run" && "${RUN_MODE}" != "runonce" && "${RUN_MODE}" != "auth-check" && "${RUN_MODE}" != "soc-check" && "${RUN_MODE}" != "runonce-DataPortalAPI" && "${RUN_MODE}" != "debug-DataPortalAPI" ]]; then
     echo "Unsupported argument: ${APP_ARGS[0]}" >&2
-    echo "Usage: ./run_local.sh [runonce|auth-check|runonce-DataPortalAPI|soc-check]" >&2
+    echo "Usage: ./run_local.sh [runonce|auth-check|runonce-DataPortalAPI|soc-check|debug-DataPortalAPI]" >&2
     exit 1
 fi
 
@@ -96,6 +96,11 @@ echo "Upgrading pip tooling"
 
 echo "Installing Python dependencies"
 "${VENV_PYTHON}" -m pip install --quiet --upgrade -r "${REQUIREMENTS_FILE}"
+
+if [[ "${RUN_MODE}" == "debug-DataPortalAPI" ]]; then
+    export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+    exec "${VENV_PYTHON}" -m polestar_mqtt.debug_responses
+fi
 
 if [[ "${RUN_MODE}" == "auth-check" ]]; then
     export PYTHONPATH="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"

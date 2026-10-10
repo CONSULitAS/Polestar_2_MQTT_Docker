@@ -292,7 +292,7 @@ Für den MVP empfohlen entschieden:
 - Scopes werden ausschließlich aus allen validierten, katalogisierten OpenAPI-GET-Operationen abgeleitet und deterministisch gebündelt
 - die konfigurierte `POLESTAR_API_BASE_URL` bleibt maßgeblich; `servers` aus einer lokalen Spezifikation ändert das Request-Ziel nicht automatisch
 - kompatible lesende Fahrzeugendpunkte werden generisch verarbeitet; Schreiboperationen bleiben ausgeschlossen
-- alle erlaubten GET-Endpunkte des Katalogs werden berücksichtigt, einschließlich Location; keine optionale Auswahl oder Ausschlussliste (Nutzervorgabe vom 2026-10-10)
+- alle erlaubten GET-Endpunkte des Katalogs werden berücksichtigt, einschließlich Location; keine konfigurierbare Auswahl. Dynamischer Ausschluss nur für die aktuelle Client-/Prozesslaufzeit, wenn die API-Fehlermeldung auf `No .* data is available for this vehicle` passt (präzisierte Nutzervorgabe vom 2026-10-10)
 - VIN bleibt explizite Konfiguration; `/v1/vehicles` dient der Validierung
 - dynamische Topics folgen der REST-JSON-Struktur; zusätzliche Kompatibilität ist Aufgabe des lokalen CSV-Mappings
 - Token und Secret werden nicht persistent gespeichert

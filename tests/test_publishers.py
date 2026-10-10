@@ -6,6 +6,7 @@ import Polestar_2_MQTT as app
 # tests for MQTT publishers and shutdown
 
 
+# Verschachtelte Legacy-Telemetrie wird in einzelne MQTT-Topics aufgelöst.
 def test_publish_json_as_mqtt_flattens_nested_structures(monkeypatch):
     fake_client = Mock()
     monkeypatch.setattr(app, "client", fake_client)
@@ -45,6 +46,7 @@ def test_publish_json_as_mqtt_flattens_nested_structures(monkeypatch):
     )
 
 
+# openWB erhält den SoC auf dem konfigurierten Ziel-Topic.
 def test_publish_soc_to_openwb_uses_configured_topic(monkeypatch):
     fake_client = Mock()
     monkeypatch.setattr(app, "client_openwb", fake_client, raising=False)
@@ -55,6 +57,7 @@ def test_publish_soc_to_openwb_uses_configured_topic(monkeypatch):
     fake_client.publish.assert_called_once_with("openWB/set/lp/1/%Soc", 64, qos=1, retain=True)
 
 
+# Beim Beenden wird die Hauptverbindung zum MQTT-Broker geschlossen.
 def test_shutdown_clients_disconnects_main_client(monkeypatch):
     fake_client = Mock()
     monkeypatch.setattr(app, "client", fake_client)

@@ -7,6 +7,7 @@ import Polestar_2_MQTT as app
 # tests for API response handling
 
 
+# Aus der Fahrzeugliste werden nur die Daten der angefragten VIN ausgewählt.
 def test_get_car_data_returns_matching_vin(monkeypatch, make_response):
     car_payload = {
         "data": {
@@ -28,6 +29,7 @@ def test_get_car_data_returns_matching_vin(monkeypatch, make_response):
     assert result == {"vin": "VIN123", "modelName": "Polestar 2"}
 
 
+# Eine nicht gelistete VIN darf keine fremden Fahrzeugdaten erhalten.
 def test_get_car_data_raises_value_error_when_vin_is_missing(monkeypatch, make_response):
     monkeypatch.setattr(
         app.requests,
@@ -42,6 +44,7 @@ def test_get_car_data_raises_value_error_when_vin_is_missing(monkeypatch, make_r
         app.get_car_data("VIN123", "token-123")
 
 
+# Eine ungültige Fahrzeuglistenstruktur durchläuft die zentrale Fehlerbehandlung.
 def test_get_car_data_calls_publish_error_and_raise_for_unexpected_shape(
     monkeypatch,
     make_response,
@@ -64,6 +67,7 @@ def test_get_car_data_calls_publish_error_and_raise_for_unexpected_shape(
         app.get_car_data("VIN123", "token-123")
 
 
+# Die Legacy-Abfrage gibt die empfangenen Fahrzeug-Telemetriedaten zurück.
 def test_get_car_telemetry_data_returns_api_data(monkeypatch, make_response):
     telemetry_payload = {
         "data": {
@@ -88,6 +92,7 @@ def test_get_car_telemetry_data_returns_api_data(monkeypatch, make_response):
     assert result == telemetry_payload["data"]["carTelematicsV2"]
 
 
+# HTTP-Fehler der Telemetrie-Abfrage werden über den zentralen Fehlerpfad gemeldet.
 def test_get_car_telemetry_data_calls_publish_error_and_raise_on_http_error(
     monkeypatch,
     make_response,
@@ -110,6 +115,7 @@ def test_get_car_telemetry_data_calls_publish_error_and_raise_on_http_error(
         app.get_car_telemetry_data("VIN123", "token-123")
 
 
+# Der Modus runonce lässt sich über die Kommandozeile auswählen.
 def test_parse_runtime_args_supports_runonce():
     args = app.parse_runtime_args(["runonce"])
 
@@ -119,6 +125,7 @@ def test_parse_runtime_args_supports_runonce():
 # tests for run-once main flow
 
 
+# Der Legacy-Einmallauf verarbeitet genau einen Zyklus und beendet die Clients.
 def test_main_runonce_completes_single_cycle_and_shuts_down(monkeypatch):
     fake_client = Mock()
 
